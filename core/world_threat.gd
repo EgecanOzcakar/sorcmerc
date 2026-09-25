@@ -51,57 +51,80 @@ const Scaler = preload("res://core/scaler.gd")
 # A tier down, not off: it is still a fight, just not a second climax.
 const BASELINE := "easy"
 
-# MEASURED (2026-09-13), and re-measured the same day after the first pass was
-# found unsound. tests/test_scaler.gd's sweep starts every party at full HP by
-# construction, so it can never see the case this file exists for; a throwaway
-# harness that damages the party before round 1 and then autoplays it produced
-# the grid below.
+# RE-MEASURED 2026-09-25 (tests/sweep_wounds.gd, the harness the first grid
+# was taken with, committed at last), and RETUNED: the owner's call on the
+# design audit (docs/audit-game-design.md §3.2, "flatten the wounds curve").
 #
-# The first run of that harness omitted `spec["seed"]`, which core/encounter.gd
-# documents as "omit for a random fight" — so every fight was randomly seeded
-# and the numbers moved run to run. The repo's own sweep pins it
-# (tests/test_scaler.gd's _sweep sets sp["seed"] = s) and so does this one now.
-# Anything measured without it is not reproducible; do not trust a grid that
-# does not say it pinned the seed.
+# The first grid (2026-09-13, 60 seeds a cell) was taken under TIER easy 0.96 /
+# CURVE 0.90, before the swing fix, RAW cover and death saves and the autopilot
+# that spends its whole turn. It had a party at 30% HP winning 35% of unscaled
+# easy fights, and this curve was cut to hold the whole range near 85%. Under
+# today's rules the same party is much stronger, and the grid is:
 #
-#   level-3 preset party, easy tier, 60 seeds a cell, fight seed pinned:
+#   level-3 preset party, easy tier, 200 seeds a cell, fight seed pinned,
+#   every slot back (PART=grid):
 #
 #     hp%      x1.00  x0.90  x0.75  x0.60  x0.50  x0.40    <- budget scale
-#     100%       95%    93%    98%      -      -      -
-#      70%       78%    80%    92%      -      -      -
-#      50%       63%    67%    82%    88%    95%    97%
-#      30%       35%    48%    62%    72%    83%    93%
+#     100%     96.5   99.0   99.0  100.0  100.0  100.0
+#      70%     89.5   93.0   96.5   99.5  100.0  100.0
+#      50%     76.0   86.5   94.0   99.5   99.0   99.5
+#      30%     60.0   69.5   81.0   92.5   96.5   98.0
 #
-# What it says:
-#  1. The hole is real. A party at 30% HP against an unscaled easy roster wins
-#     35% of the time — the walk home from a cleared lair was a coin flip it was
-#     losing badly.
-#  2. Scaling down keeps helping, monotonically, all the way to x0.40. An
-#     earlier version of this comment claimed the opposite ("below ~0.6 it stops
-#     helping and starts hurting"); that was an artifact of the unseeded run and
-#     is false. There is no measured reason to fear a low floor.
-#  3. Getting a badly hurt party home reliably therefore needs a LOW floor —
-#     around x0.5 at 30% HP, not the x0.75 the bad grid suggested.
+# The old curve (HURT_AT 0.90, floor 0.39, x0.35 at zero) put a company at
+# 70 / 50 / 30% HP on x0.79 / 0.67 / 0.53, which that grid reads as 98 / 98 /
+# 96%: a hurt company won as often as a fresh one, and hit points were barely
+# a resource on the road. The owner's call: pressing on hurt should carry a
+# real risk. So the curve now aims at two numbers the game already names —
+# tests/test_scaler.gd's own targets. A company at HALF its HP meets what a
+# fresh one meets at "normal" (85%); at 30% it meets "hard" (75%). Hurt is a
+# tier up, not a free pass, and the full-HP number does not move.
+#
+# The live curve, both columns this sweep (PART=curve), master (HURT_AT 0.90,
+# floor 0.39) against this (HURT_AT 0.50, floor 0.80), 200 seeds a cell:
+#
+#                 every slot back           every slot spent (slot_hold)
+#     hp%      master       now           master       now
+#   level 3
+#     100%   x0.90 99.0   x0.90 99.0    x1.29 95.0   x1.29 95.0
+#      70%   x0.79 98.0   x0.90 93.0    x1.12 91.5   x1.29 85.5
+#      50%   x0.67 97.5   x0.90 86.5    x0.95 94.0   x1.29 73.5
+#      30%   x0.53 96.0   x0.82 74.5    x0.75 91.0   x1.18 63.0
+#   level 8
+#     100%   x0.90 97.5   x0.90 97.5    x1.58 80.0   x1.58 80.0
+#      70%   x0.78 99.0   x0.90 92.5    x1.37 82.5   x1.58 59.0
+#      50%   x0.66 99.0   x0.90 86.5    x1.16 85.5   x1.58 47.5
+#      30%   x0.53 98.0   x0.83 72.5    x0.93 87.5   x1.45 38.5
+#
+# On master the wounds discount more than paid back the slots a drained
+# company had spent: a level-8 company with no slots won MORE often the more
+# hurt it was (80.0% fresh, 87.5% at 30% HP). Now both halves of its condition
+# cost it. The right-hand column is the walk home from a cleared lair, and it
+# is the number to watch: a level-8 company at half HP with nothing left to
+# cast wins a road fight about half the time. That is the gamble the owner
+# asked for, and the approach card's other three answers (slip past, parley,
+# ambush) are how a hurt company avoids taking it.
 
 # The flat part, and the user's own ask: open-world bands are some percent
-# easier than the tier alone, always. Measured 93% at full HP against 95%
-# unscaled — the road is not the content and should not cost a reload.
+# easier than the tier alone, always. Measured 99.0% at full HP (level 3,
+# sweep_wounds, 2026-09-25) against 96.5% unscaled — the road is not the
+# content and should not cost a reload. Unchanged by the 2026-09-25 retune.
 const WILDERNESS_SCALE := 0.90
 
-# Where the condition curve starts biting. 0.90: the grid shows an unscaled
-# party already down to 78% at 70% HP, so protection has to start almost as
-# soon as the party is meaningfully hurt, not wait for a crisis.
-const HURT_AT := 0.90
+# Where the condition curve starts biting. 0.50: above half HP the company
+# meets the fresh company's roster, body for body, and pays for its wounds in
+# win rate (93.0% at 70% HP, 86.5% at 50%, level 3). Was 0.90, which started
+# the discount at the first scratch.
+const HURT_AT := 0.50
 
-# The most the party's condition can thin a fight, on top of WILDERNESS_SCALE.
-# 0.39, so the combined floor is 0.90 * 0.39 ~= 0.35 — below the x0.40 column,
-# which measured 93% at 30% HP. Chosen to hold the whole curve near 85%: at
-# 70/50/30% HP this lands on roughly x0.78/0.66/0.53, which the grid puts at
-# about 89/85/85%. Getting home is meant to be likely, not certain.
+# The most the party's condition can thin a fight, on top of WILDERNESS_SCALE:
+# 0.80, so the combined floor is 0.90 * 0.80 = 0.72. Chosen off the grid for
+# 30% HP to land on hard's 75%: the curve puts it on x0.82, which measured
+# 74.5% (level 3) and 72.5% (level 8). Was 0.39 (a floor of 0.35, a fight a
+# third of the size) when the aim was to make getting home near-certain.
 # It must never reach 0.0 — Scaler._build() appends a body before it checks the
 # budget, so a zero budget still fields one monster; the floor is about the
 # fight staying a fight, not about avoiding an empty roster.
-const CONDITION_FLOOR := 0.39
+const CONDITION_FLOOR := 0.80
 
 # Derived, and the two numbers anything outside this file should reason about:
 # the kindest and the harshest multiplier the wilderness can ever ask for.
@@ -158,6 +181,10 @@ static func party_hp_frac(party) -> float:
 # or when there is nobody to read — both readings then floor at the same 1.0.
 # It never makes a fight bigger than the one a fresh party of this build would
 # meet; it only stops the spent slots from making it smaller.
+# Since 2026-09-25 "a fresh party of this build" includes its bonds
+# (Regions.fresh_score prices a bonded pair's shoulder AC, which no single
+# hero's reading can see), so a bonded company's hold is above 1.0 even with
+# every slot in hand: the one place on the road a bond is priced.
 static func slot_hold(party) -> float:
 	return Scaler.held_at(Regions.fresh_score(party), Scaler.party_score(party.party_characters()))
 

@@ -6,13 +6,17 @@
 # monk's Flurry, a rogue's Dash to reach and Hide after shooting, Bardic
 # Inspiration on the ally in the thick of it, a held concentration left alone,
 # a downed ally lifted by a Bonus Action heal with the action still free, and
-# the two ways out at a third of HP (Misty Step, Disengage-and-walk). Then every
+# the two ways out at a third of HP (Misty Step, Disengage-and-walk), and a
+# sorcerer arming Metamagic (Quickened for a Fireball, the action still spent
+# as ever; Twinned only for a spell that twins). Then every
 # kit at levels 3 and 8: the fights finish, the same seed plays the same fight,
 # and a kit with a Bonus Action on offer spends it on a fair share of its turns.
 #   godot --headless --path . -s tests/test_autopilot.gd
 extends SceneTree
 
 const Adapter = preload("res://core/adapter.gd")
+const Character = preload("res://core/character.gd")
+const Creator = preload("res://scenes/creator/creator.gd")
 const AI = preload("res://core/ai.gd")
 const Combat = preload("res://core/combat.gd")
 const Encounter = preload("res://core/encounter.gd")
@@ -40,6 +44,7 @@ func _init() -> void:
 	test_concentration_is_kept()
 	test_bonus_heal_keeps_the_action()
 	test_ways_out()
+	test_metamagic_armed()
 	test_every_kit()
 	print("test_autopilot: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -163,6 +168,77 @@ func test_ways_out() -> void:
 	var t := log_since(cb, n0)
 	check(t.contains("disengages") and Hex.distance(h.pos, g.pos) > 1 and h.hp == hp0,
 		"a hurt rogue Disengages and walks, and the ogre gets no swing on the way out:\n%s" % t)
+
+# Metamagic (the design audit §7.4): a sorcerer with the points arms Quickened
+# for a leveled damage spell it can aim, casts it on the Bonus Action, and still
+# spends the action as it would have; one with no slot left arms nothing;
+# Twinned is armed only for a spell that twins. On the forest clearing, whose middle is
+# open: the goblin camp's stakes stand between the sorcerer and its targets.
+func _metamage(options: Array, prepared: Array):
+	var ch := Character.new()
+	ch.id = "sorc"
+	ch.cname = "Sorc"
+	ch.species_id = "human"
+	ch.background_id = "sage"
+	ch.base_abilities = {"str": 8, "dex": 14, "con": 14, "int": 10, "wis": 10, "cha": 16}
+	for i in 5:
+		ch.add_level("sorcerer", -1)
+	for i in options.size():
+		ch.decide("feature-choice:class:sorcerer:%d" % i, {"type": "feature-choice", "optionId": "%s-spell" % options[i]})
+	for p in ch.sheet().pending:
+		if String(p["key"]) == "spell-choice:class:sorcerer:0":   # the cantrips
+			ch.decide(p["key"], Creator.decision_for(p, ["fire-bolt", "ray-of-frost", "shocking-grasp", "mind-sliver"]))
+	ch.prepared.assign(prepared)
+	ch.dirty()
+	return ch
+
+func _goblins_at(cells: Array) -> Array:
+	var out: Array = []
+	for i in cells.size():
+		out.append(Encounter.spawn("goblin", 6.0, "foe", cells[i], i + 1))
+	return out
+
+func test_metamagic_armed() -> void:
+	var h = Adapter.to_combatant(_metamage(["quickened", "twinned"], ["fireball", "hold-person"]),
+		"party", Vector2i(1, 0))
+	var foes := _goblins_at([Vector2i(6, 0), Vector2i(6, 1), Vector2i(7, 0)])
+	var cb = Combat.new(RNG.new(11), [h] + foes, Encounter.board_for("forest-clearing"))
+	cb.begin_turn_for(h)
+	h.pools["sorcerer-innate-sorcery"]["cur"] = 0   # its Bonus Action would come first (_use_kit)
+	var sp0: int = h.pool_left("sorcery-points")
+	var n0: int = cb.log.size()
+	AI.take_turn(cb, h)
+	var t := log_since(cb, n0)
+	check(t.contains("(Quickened Spell)") and t.contains("casts Fireball"),
+		"a sorcerer with the points quickens a Fireball that nets three:\n%s" % t)
+	check(h.pool_left("sorcery-points") == sp0 - 2, "...for 2 sorcery points (%d -> %d)" % [sp0, h.pool_left("sorcery-points")])
+	check(int(h.econ["action"]) == 0 and int(h.econ["bonus"]) == 0, "...and the whole turn is spent (%s)" % h.econ)
+
+	# No slot left and no points to make one: nothing to quicken, nothing armed.
+	var dry = Adapter.to_combatant(_metamage(["quickened", "twinned"], ["fireball"]), "party", Vector2i(1, 0))
+	for i in dry.slots.size():
+		dry.slots[i] = 0
+	dry.pools["sorcery-points"]["cur"] = 2
+	cb = Combat.new(RNG.new(11), [dry] + _goblins_at([Vector2i(6, 0), Vector2i(6, 1), Vector2i(7, 0)]),
+		Encounter.board_for("forest-clearing"))
+	cb.begin_turn_for(dry)
+	n0 = cb.log.size()
+	AI.take_turn(cb, dry)
+	t = log_since(cb, n0)
+	check(not t.contains("Quickened"), "no slot for a leveled spell: Quickened is not armed:\n%s" % t)
+
+	# Twinned rides only a spell that upcasts for another target.
+	var tw = Adapter.to_combatant(_metamage(["twinned", "careful"], ["hold-person"]), "party", Vector2i(1, 0))
+	var two := _goblins_at([Vector2i(4, 0), Vector2i(5, 1)])
+	cb = Combat.new(RNG.new(11), [tw] + two, Encounter.board_for("forest-clearing"))
+	cb.begin_turn_for(tw)
+	var bolt: Dictionary = cb.available(tw).filter(func(v): return String(v.get("spell", "")) == "fire-bolt")[0]
+	var hold: Dictionary = cb.available(tw).filter(func(v): return String(v.get("spell", "")) == "hold-person")[0]
+	AI._twin(cb, tw, bolt, two)
+	check(not tw.has("metamagic"), "a Fire Bolt does not twin, so Twinned is not armed for it")
+	AI._twin(cb, tw, hold, two)
+	check(tw.has("metamagic") and String(tw.statuses["metamagic"]["option"]) == "twinned",
+		"a Hold Person with a second foe standing arms Twinned")
 
 # Every kit, levels 3 and 8, a normal roster: the fight ends, plays the same
 # twice, and the Bonus Action is spent on a fair share of the turns it is on

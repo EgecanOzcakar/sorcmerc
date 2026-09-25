@@ -191,15 +191,27 @@ const BOARD_ROUGH := 6       # rough patches sprinkled on the new ground
 # An authored board, or a content pack's, is free to cut a real cliff and take
 # that proof on itself.
 #
-# ONE SHELF IS A BALANCE NUMBER, not a taste one, and tests/test_scaler.gd owns
-# it. Ground that costs a point to climb taxes whoever is APPROACHING, and at
-# level 3 that is mostly the monsters while the party shoots and casts — so
-# raised ground moves the win rate the party's way. Measured, level-3 preset
-# party on hard, 200 fights a tier: flat 83.5%, one shelf 85.0%, two shelves
-# 87.5%. The band is 65-85%, so two shelves puts the game outside the
-# difficulty it is calibrated to and one keeps it in. Raising this means
-# re-measuring core/scaler.gd's knobs, which is a balance pass and not a
-# side-effect of a map feature.
+# One shelf was measured as a balance number when it went in. Ground that
+# costs a point to climb taxes whoever is APPROACHING, and at level 3 that is
+# mostly the monsters while the party shoots and casts. Measured then (#156),
+# level-3 preset party on hard, 200 fights a tier: flat 83.5%, one shelf
+# 85.0%, two shelves 87.5% — and two was kept off because the band then was
+# 65-85%.
+#
+# RE-MEASURED 2026-09-25 (tests/sweep_tier.gd at scale 1.0, 200 seeds a tier,
+# level-3 presets, fight seed pinned, run in a copy of master with only this
+# constant edited), under today's rules and autopilot:
+#                 easy    normal   hard
+#   no shelf      96.0%   92.5%    81.5%
+#   one (this)    96.5%   93.0%    81.5%
+#   two shelves   95.5%   93.5%    79.0%
+# Every move is inside 1.5 standard errors (~4.5 points at 200 seeds). The
+# shelf no longer moves the win rate at all: the autopilot that spends its
+# whole turn closes and swings rather than holding ground, and the old
+# measurement's 4-point spread was itself about one SE. So this is a taste
+# number now — how much relief a board has — and a second shelf would not
+# need a retune. It stays at one because one is what every sweep since #156
+# was taken on.
 const BOARD_SHELVES := 1
 const SHELF_RINGS := 2       # the widest a shelf gets
 
@@ -697,15 +709,56 @@ static func mark_quarry(foes: Array, party_c: Array) -> void:
 	nearest.pos = p
 
 const SPAWN_GAP := 6    # no foe spawns closer than this to any party member
-# T36/T37: measured lever, not a guess -- 150-seed sweeps found this the best
-# single difficulty knob (+6.6 win-rate points over gap 3, no fight-length
-# cost) with current board sizes (5-9 hexes wide) saturating right around
-# here, so going further needs bigger boards first. Ranged-attack usage is
+# T36/T37: measured then as the best single difficulty knob -- 150-seed sweeps
+# found +6.6 win-rate points over gap 3, no fight-length cost, on the 5-9-hex
+# boards of the day, saturating right around here. Ranged-attack usage was
 # flat under every gap tested (roster composition, not geometry -- see
-# docs/expansion-plan.md's T35/T36/T37 entries) -- this is a difficulty
-# tune, not a fix for that.
+# docs/expansion-plan.md's T35/T36/T37 entries).
+#
+# RE-MEASURED 2026-09-25 (tests/sweep_tier.gd at scale 1.0, 200 seeds a tier,
+# level-3 presets, fight seed pinned, a copy of master with only this edited),
+# on the grown 9-row boards (2026-09-15) and today's autopilot:
+#                 easy    normal   hard
+#   gap 3         97.0%   95.0%    81.5%
+#   gap 6 (this)  96.5%   93.0%    81.5%
+#   gap 9         93.5%   91.5%    81.0%
+# The +6.6 is gone, and if anything the sign has turned (a closer spawn is a
+# hair EASIER at normal, the autopilot getting its swings in first), but every
+# move is inside 1.5 standard errors. On the grown boards the gap is not a
+# difficulty knob any more; it is where the fight opens. Left at 6, which is
+# what every sweep since T37 was taken on.
 
 # Difficulty multiplier -> stat deltas (T8 picks the multiplier, this owns the shape).
+# Per point of mult over 1.0 (and under it): +3 AC, +4 to hit and save DC, +4
+# damage a blow; HP scales by the mult itself.
+#
+# MEASURED 2026-09-25 (tests/sweep_mult.gd; the design audit §7.3 found these
+# with no sweep behind them). The one place the generator pushes a foe high is
+# a boss lead (Scaler.boss_for, up to BOSS_MULT_MAX 3.0: +6 AC, +8 to hit).
+# Every BOSS_POOL boss with a lead, built for the preset trio, fight seed
+# pinned, run in copies of master with only these three edited. power.gd prices
+# the SCALED statblock, so a smaller bump is answered by a bigger mult — the
+# budget is the same, only what it is spent on moves:
+#                      3/4/4 (this)     2/2/2            0/0/0 (HP only)
+#   level 3, 200 seeds a boss
+#     arrow-chief      x1.75  78.0%     x1.75  87.5%     x1.75  83.5%
+#     shop-captain     x2.05  55.0%     x2.45  70.0%     x3.00  61.5%
+#     pool (5 bosses)         75.2%            75.8%            67.9%
+#   level 8, 100 seeds a boss
+#     shop-captain     x3.00  77.0%     x3.00  78.0%     x3.00  81.0%
+#     pool (5 bosses)         82.4%            84.4%            85.8%
+# What it says: at the pool level the bumps are priced about right (3/4/4 and
+# 2/2/2 read the same, 75.2 against 75.8 at level 3). On ONE high-mult lead
+# they are worth more than power.gd credits: the level-3 captain at x2.05 with
+# +3 AC / +4 to hit plays 15 points harder than the same budget spent at 2/2/2
+# (x2.45), about three standard errors. It stays inside the boss band (15-85%),
+# and a boss is meant to be the hard fight, so nothing moved. The HP-only row
+# is the other half of the answer: without the bumps a lead scaled DOWN (the
+# oni and the mammoth sit on MULT_MIN 0.6 at level 3) keeps its full AC and
+# to-hit, and the level-3 pool gets 7 points harder; at level 8, where only
+# the mammoth sits on the floor, it is 3 points easier (noise). Revisit if a boss outside the pool
+# (core/site.gd's FACTION_BOSS) is ever found pinned at the ceiling and out of
+# its band.
 const AC_PER_MULT := 3
 const ATK_PER_MULT := 4
 const DMG_PER_MULT := 4

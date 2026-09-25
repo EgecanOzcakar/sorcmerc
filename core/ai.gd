@@ -535,6 +535,15 @@ static func _party_action(cb, h) -> void:
 				_move_by(cb, h, _toward(cb, t.pos))
 			reach = cb.enemies_of(h).filter(func(c): return cb.in_reach(h, c))
 
+	# Metamagic: a leveled spell quickened onto the Bonus Action from wherever the
+	# move above has put the caster; the action then goes on below exactly as it
+	# would have, and combat keeps it off a second leveled spell (_quicken).
+	if not walking and _quicken(cb, h):
+		foes = cb.enemies_of(h)
+		reach = foes.filter(func(c): return cb.in_reach(h, c))
+		if not h.conscious() or cb.is_over() or foes.is_empty():
+			return   # the Quickened spell finished it, or finished its caster
+
 	# caster: an area spell (a hex, a corner circle, a line) where it nets 2+ foes
 	# ...that actually hurts: Faerie Fire and friends are the player's call, not a nuke
 	var area := _pick(cb, h, func(v): return v.get("targeting", "") in ["hex", "corner", "line"] and v.has("dice_count"))
@@ -568,7 +577,82 @@ static func _party_action(cb, h) -> void:
 	# no weapon reach: a single-target attack spell (a cantrip needs no slot)
 	var bolt := _pick(cb, h, func(v): return v["kind"] == "spell" and v.get("targeting", "") == "enemy" and v.has("dice_count"))
 	if not bolt.is_empty() and cb.legal_target(h, bolt, targets[0]):
+		_twin(cb, h, bolt, foes)
 		cb.perform(h, bolt, targets[0])
+
+# --- Metamagic (the design audit §7.4) --------------------------------
+#
+# The autopilot arms two of the five options core/metamagic.gd's BUILT lists,
+# so a sweep can see what they are worth: before this nothing armed any, and
+# Quickened is exactly the action-economy lever core/scaler.gd's header ranks
+# first. Careful, Subtle and Seeking are left to a player.
+#   Quickened  a leveled damage spell that can be aimed this turn goes out as
+#              the Bonus Action, cast from wherever _party_action's move has put
+#              the caster, and the action then does what it would have done
+#              anyway — the swing or the cantrip, since combat refuses a second
+#              leveled spell, as 2024 does. The turn's movement and the action's
+#              rules are untouched, so what a sweep sees is the option and
+#              nothing else. Armed only when that spell is cast straight after,
+#              so the points never ride a cantrip. Innate Sorcery's Bonus Action
+#              (_use_kit) comes first on the turn it is pressed.
+#   Twinned    armed just before a single-target spell that upcasts for another
+#              target, with a second foe standing (_party_action's bolt). Every
+#              such spell in data/effects/spells.json today is a control spell
+#              (Hold Person, Command, the charms), which the autopilot never
+#              casts, so under autoplay it is inert; it is here so that the day
+#              a damage spell twins, or the autopilot throws a lock, it is used.
+# An option armed and not taken is refunded at the turn's end
+# (combat._refund_metamagic), so neither can waste a point.
+static func _quicken(cb, h) -> bool:
+	if int(h.econ.get("bonus", 0)) <= 0 or h.econ.get("cast_leveled_spell", false):
+		return false
+	var arm := _metamagic(cb, h, "quickened")
+	if arm.is_empty():
+		return false
+	var foes: Array = cb.enemies_of(h)
+	var leveled: Array = cb.available(h).filter(func(v): return v["kind"] == "spell" \
+		and int(v.get("slot_level", 0)) > 0 and String(v.get("cost", "")) == "action" and v.has("dice_count"))
+	# _party_action's own order: an area that nets two, a cone that does, and
+	# only then one foe — so the points never turn a Burning Hands into an Orb.
+	for shape in [["hex", "corner", "line"], ["direction"], ["enemy"]]:
+		for v in leveled:
+			if not String(v.get("targeting", "")) in shape:
+				continue
+			var aim = _aim(cb, h, v, foes)
+			if aim == null:
+				continue
+			if cb.perform(h, arm).has("error"):
+				return false
+			return not cb.perform(h, v, aim).has("error")
+	return false
+
+static func _twin(cb, h, v: Dictionary, foes: Array) -> void:
+	if cb._twin_step(v) <= 0 or foes.filter(func(c): return c.conscious()).size() < 2:
+		return
+	var arm := _metamagic(cb, h, "twinned")
+	if not arm.is_empty():
+		cb.perform(h, arm)
+
+# The Metamagic button for `option`, {} if this hero cannot press it now
+# (not known, points short, one already armed).
+static func _metamagic(cb, h, option: String) -> Dictionary:
+	return _pick(cb, h, func(v): return v["kind"] == "metamagic" and String(v.get("option", "")) == option)
+
+# Where `v` would go this turn by _party_action's own rules, null if nowhere is
+# worth it: an area where it nets two foes, a cone likewise, else the weakest
+# foe it can legally reach.
+static func _aim(cb, h, v: Dictionary, foes: Array):
+	match String(v.get("targeting", "")):
+		"hex", "corner", "line":
+			return _best_area(cb, h, v)
+		"direction":
+			var d := _best_cone(cb, h, v)
+			return d if d != Vector2i.ZERO else null
+		"enemy":
+			var ok: Array = foes.filter(func(c): return c.conscious() and cb.legal_target(h, v, c))
+			ok.sort_custom(func(a, b): return a.hp < b.hp)
+			return ok[0] if not ok.is_empty() else null
+	return null
 
 # Every swing the economy holds, re-targeted between them — the Attack action's
 # Extra Attack, and whatever a Bonus Action banked on top (Flurry of Blows, War

@@ -37,6 +37,7 @@ extends RefCounted
 
 const Adapter = preload("res://core/adapter.gd")
 const Encounter = preload("res://core/encounter.gd")
+const PartyOpinion = preload("res://core/party_opinion.gd")
 const Power = preload("res://core/rules/power.gd")
 const Presets = preload("res://core/presets.gd")
 const Scaler = preload("res://core/scaler.gd")
@@ -305,15 +306,43 @@ static func scale_for(world, pos: Vector2, have: int, fresh: float) -> float:
 # The party as core/rules/power.gd prices it with every slot back: the reading
 # power_scale pins against. Power.estimate reads max_hp, never current hp, so
 # the slots are the only thing a rest would change about it.
+#
+# And its bonds (the design audit §7.4, priced 2026-09-25). A bond is the
+# company's, not a hero's — core/party_opinion.gd's +SHOULDER_AC for two who
+# are bonded or lovers fighting side by side, and the rally when one drops —
+# so power.gd, which reads one Combatant, cannot see it, and this is the one
+# reading of the whole company every road fight and every lair is priced from:
+# core/world_threat.gd's slot_hold and core/site.gd's entry score both hold a
+# budget at it, so a bonded company is sent the bigger fight on the road and
+# underground alike. Priced as the +1 AC for the share of the blows it is
+# there for (SHOULDER_SHARE). tests/sweep_unpriced.gd measured every pair
+# bonded at +8.0 at hard, level 3, and +4.3 at level 8 (300 seeds), unpriced.
+# Priced as the AC held all fight it came back +1.5 at level 3 and -6.0 at
+# level 8 (over-priced: at a level-8 AC one point is a sixth of power.gd's
+# ehp); at SHOULDER_SHARE it is +5.5 and +1.0 — the level-3 residual is the
+# rally, which is not priced. Rivals' -1 to hit is left unpriced: it only ever
+# makes a fight harder than its price, which is the safe direction.
+#
+# SHOULDER_SHARE: of the blows aimed at a hero with a bonded partner, how many
+# land while the partner stands beside them. MEASURED 2026-09-25, the preset
+# trio all bonded, hard, 80 pinned fights a level: 43% at level 3 (1022 of
+# 2350), 50% at level 8 (2008 of 3998).
+const SHOULDER_SHARE := 0.45
+
 static func fresh_score(party) -> float:
 	if party == null:
 		return 1.0
-	var team: Array = []
+	var total := 0.0
+	var ids: Array = party.party_characters().map(func(ch): return ch.id)
 	for ch in party.party_characters():
 		var c = Adapter.to_combatant(ch, "party", Vector2i.ZERO)
 		c.slots = Adapter._full_slots(c.sheet)
-		team.append(c)
-	return maxf(1.0, Power.team_score(team))
+		var score: float = float(Power.estimate(c)["score"])
+		if ids.any(func(o): return o != ch.id and PartyOpinion.is_close(party, ch.id, o)):
+			c.ac += PartyOpinion.SHOULDER_AC
+			score = lerpf(score, float(Power.estimate(c)["score"]), SHOULDER_SHARE)
+		total += score
+	return maxf(1.0, total)
 
 
 # What a level-N party is worth, on core/rules/power.gd's own scale. Measured

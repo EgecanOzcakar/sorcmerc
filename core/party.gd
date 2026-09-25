@@ -169,6 +169,32 @@ func bench(id: String) -> bool:
 	return true
 
 # Swap a benched member in for an active one (the UI's slot click).
+#
+# MEASURED 2026-09-25 (tests/sweep_road_day.gd ROTATE; the design audit §4.4
+# asked whether a fresh benched company is a second slot pool). A second
+# preset trio on the bench, ten days of road, ten runs a level, sleeping when
+# the long-rest gate opens:
+#
+#                         no bench   swapped when spent   swapped eagerly
+#   level 3  won           94.7%          94.8%               96.3%
+#            fights a rest  4.1            4.2                 4.2
+#            HP/slots in   77/70%         79/75%              88/92%
+#   level 6  won           88.4%          88.8%               97.0%
+#            fights a rest  3.7            3.7                 4.0
+#            HP/slots in   79/73%         80/74%              90/89%
+#
+# It is real where a player works it. Swapped only when the marching trio is
+# spent it is noise; swapped before nearly every fight (135 swaps in 100 days)
+# the bench keeps the marching trio fresh and the road's win rate climbs,
+# 88.4 -> 97.0% at level 6 — the flattened wounds curve (core/world_threat.gd)
+# is exactly what makes a fresh trio worth having. It is not a second day: the
+# bench buys fresher fights, not more of them (the clock an hour-a-round fight
+# costs sets how many a rest holds). What it costs is the levelling: a benched
+# hero earns nothing, so six heroes sharing the road's XP each level at about
+# half the pace, plus the second trio's hire. The bench already sleeps only
+# when the company does (core/settlement_visit.gd's rest walks the whole
+# roster), which is the audit's own remedy, so nothing here moved; whether the
+# XP price is enough is the owner's call (the build log, "The measured pass").
 func swap(active_id: String, bench_id: String) -> bool:
 	var i := active.find(active_id)
 	var ch = get_member(bench_id)

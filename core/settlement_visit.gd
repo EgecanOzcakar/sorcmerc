@@ -65,6 +65,24 @@ const KIND_SERVICES := {
 # camp-kit's out-of-settlement long rest (core/world_camp.gd) already has its
 # own cost (the kit price + ambush risk) and isn't staying at anyone's inn.
 const INN_COST := {"city": 40, "town": 20, "camp": 10}
+# MEASURED 2026-09-25 (tests/sweep_road_day.gd, the same road as
+# LONG_REST_COOLDOWN's table; the design audit §4.4's "the gold cost of rest
+# shrinks to nothing" was an estimate). What the fights between two long rests
+# bring in (coin, plus loot sold at Campaign.SELL_RATE), and a night's price as
+# a share of it:
+#
+#                          level 3   level 6   level 10
+#   income a long rest      82 ◉     162 ◉     262 ◉
+#   a town inn (20 ◉)        24%       12%        8%
+#   a city inn (40 ◉)        49%       25%       15%
+#   a town at Known (10 ◉)   12%        6%        4%
+#   a camp kit (150 ◉)      183%       92%       57%
+#
+# So the estimate is half right: an inn is a real bite at level 3 and a
+# rounding error by 10, but a night away from a town (the camp kit) still
+# costs half a day's takings in the Deeps. Nothing moved: the owner's rest
+# decisions (the kit, the gate, the ticking night) already stand, and a
+# price that scales with level is a sink question for the economy pass.
 
 # The ladder (core/ladder.gd): a Known company pays half for its bed, a Sworn
 # one nothing — the one thing every rung is for is people, and an innkeeper
@@ -429,6 +447,28 @@ const SHORT_REST_MINUTES := 60.0
 # before — a settlement visit could spam free full heals with no cost but clock
 # time. can_long_rest() below is the gate; T9x's camp-kit rest goes through the
 # same rest()/stamp, so it's covered too, not a second rule to keep in sync.
+#
+# MEASURED 2026-09-25 (tests/sweep_road_day.gd; the design audit §4.4 had it
+# as an estimate that "two road fights fill a day, so the gate barely binds").
+# The preset trio carried on one set of resources through ten days of road,
+# ten runs a level: a contact every 37 walked minutes (sweep_route_travel's
+# 0.67 per 1000 units), every one fought, the clock billed an hour a round,
+# a short rest under half HP, a long rest the moment this gate opens:
+#
+#                      level 3   level 6   level 10
+#   fights a day         2.84      2.49      2.28
+#   fights a long rest   4.1       3.7       3.3
+#   long rests a day     0.69      0.68      0.69
+#   at the long rest     45% HP    34% HP    44% HP
+#                        21% slots 17% slots 35% slots
+#   road fights won      94.7%     88.4%     92.5%
+#
+# The gate binds. A long rest can only come 24 hours after the last one ENDED,
+# so the cycle is ~34 hours, and a company that sleeps the moment it may lies
+# down with a third to a half of its HP and a fifth to a third of its slots —
+# it has been spending the day, not waiting for the night. What keeps the day
+# short is the clock a fight costs (an hour a round), not the gate: resting
+# only when spent (REST=need) stretches it to 4.5 / 4.1 / 4.5 fights a rest.
 const LONG_REST_COOLDOWN := 1440.0
 # #86: RAW's adventuring day — two short rests between long rests. Same shape as
 # core/campaign.gd's MAX_SHORT_RESTS, but counted per long rest, not per run.

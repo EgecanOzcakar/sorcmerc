@@ -41,11 +41,16 @@ const FAMILIES := ["temperament", "origin"]   # the two a hero picks; marks, ban
 # much in a fight (spec §3) — the fight-start stamp and the roll together.
 # MEASURED 2026-09-23 (tests/sweep_traits.gd, 300 seeds, the preset trio all
 # holding one trait, normal): baseline 88.7% win; no trait moves it more than
-# +3.0 (Craven 91.7%, Calm and Night-owl 91.3%, the rest +0..+1). Calm's and
-# Night-owl's rows are identical — the −1 initiative both carry by day only
-# reshuffles the fight — which puts the seed noise floor at about 3 points, so
-# at ±2 nothing here stands out of it. Re-run the sweep when CAP or a number in
-# data/traits.json moves.
+# +3.0 (Craven 91.7%, Calm and Night-owl 91.3%, the rest +0..+1).
+# RE-MEASURED 2026-09-25 (the design audit §7.2: the first run predates RAW
+# cover and death saves and the autopilot that spends its whole turn), same
+# sweep, 300 seeds, on master: baseline 89.7%; the largest moves are Craven
+# and Wrathful +2.0 (91.7%), Street-raised +1.3, Cautious, Marsh-bred,
+# Downs-rider and Cave-dweller +1.0, Woods-born and Night-owl +0.3, and Brave,
+# Calm, Greedy, Generous and Curious +0.0. A standard error at 300 seeds is
+# about 1.7 points, so every row is inside noise; nothing to retune. Calm's
+# −1 initiative by day still only reshuffles the fight (6.34 rounds against
+# 6.46). Re-run the sweep when CAP or a number in data/traits.json moves.
 const CAP := 2
 
 # The half of `when` that is known before the first roll: stamped once, at
@@ -682,6 +687,29 @@ static func save_mode(c, cb, conds: Array) -> Dictionary:
 # each hero 3.7 triumphs, 1.6 resiliences, 1.2 scars, 4.9 wounds and 0.8
 # cures, and each ends it holding 6.1 earned traits (8.0 before KIND_CAP):
 # 5.1 triumphs and resiliences, 0.4 scars, 0.6 wounds.
+#
+# RE-MEASURED 2026-09-25 (the design audit §7.2: the table above predates RAW
+# cover and death saves and the autopilot that spends its whole turn), same
+# sweep and seeds, on master:
+#
+#               win%   triumph  resilience  scar  wound
+#     easy       98       2.3       2.7      0.7   12.0
+#     normal     90       2.3       3.3      0.7   13.8
+#     hard       86      20.3       2.7      1.8   17.0
+#     deadly     93      23.2       3.3      1.2   15.2
+#
+# The owner's rule holds with more room than before: triumphs outnumber scars
+# three to one on the road's easy fights and eleven to nineteen to one where
+# "flawless" can fire. Hardship saves were asked 246 times (355): 29%
+# tempered, 21% shook it off, 30% scarred, 20% scarred and Shaken. Wounded is
+# still the commonest trait (203), then Emboldened (123) and Shaken (92).
+# "Watched a friend die" was asked 65 times. The 30-day run now gains each
+# hero 3.9 triumphs, 1.4 resiliences, 0.8 scars, 3.9 wounds and 0.6 cures,
+# and each ends it holding 5.6 earned traits (5.0 triumph-kind, 0.2 scars,
+# 0.4 wounds); the company lost 58 of its 880 fights. KIND_CAP still binds
+# the triumph side only. Nothing here was retuned: the direction every number
+# moved (fewer scars and wounds, more flawless hard fights) is the stronger
+# autopilot, and the rule the constants serve is met.
 # ponytail: one event can still leave both of its outcomes on a hero over two
 # lairs (Delver and Reckless) while there is room under the cap. Revisit if a
 # player reads the pair as a contradiction rather than a story.
