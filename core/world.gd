@@ -163,7 +163,7 @@ class Lair extends RefCounted:
 	# there) or "abandoned" (they packed up and left). "" while it is still live.
 	var resolved_as := ""
 	# World-clock stamp of the moment it was spent, < 0 = still live. A hole in
-	# the ground does not stay empty: core/world_lairs.gd's RESPAWN lets
+	# the ground does not stay empty: core/world_lairs.gd's respawn_after lets
 	# something move back into it, and this is the clock that runs.
 	var cleared_at := -1.0
 	# Raids (core/raids.gd): the clock a lair left alone runs against the

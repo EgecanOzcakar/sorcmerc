@@ -64,10 +64,13 @@
 # world.gd's KILLED_THEIRS); the owner's call (2026-09-25) gives them a grudge
 # and only a grudge, in its own model (core/grudges.gd), read by the grudge term.
 #
-# DETERMINISM. A roll is seeded off the caller's key — the edge, the stretch of
-# it, and the world-day (step_key()) — so walking the same stretch on the same
-# day meets the same thing, and a reload cannot reroll a road the player did not
-# like. The next day it is a fresh road.
+# DETERMINISM. A roll is seeded off the caller's key — the edge the company is
+# on and the road's odometer (step_key()) — so a reload, which restores the
+# odometer, cannot reroll a road the player did not like, and every stretch
+# actually walked is a roll of its own. It was first keyed on the stretch and
+# the world-day instead, which made the same stretch walked twice in a day the
+# same stretch: a band beaten on the way out was waiting again on the way back,
+# and a quiet stretch stayed quiet however often the company paced it.
 #
 # What this does NOT own: the fight (encounter_spec and Scaler, unchanged — a
 # route band is fought exactly as a roaming one is), the card that asks how to
@@ -83,25 +86,29 @@ const Grudges = preload("res://core/grudges.gd")
 const RNG = preload("res://core/rng.gd")
 
 # Contacts per 1000 units walked, before cover, lure, hunt and grudge — the
-# same in every ring. Calibrated so the model's mean rate along the sweep's itineraries
-# equals the rate today's free-roaming map actually delivers, so switching the
-# model in changes WHERE the danger is, not how much of it there is.
+# same in every ring. Calibrated so the model's mean rate along the sweep's
+# itineraries equals the rate today's free-roaming map actually delivers, so
+# switching the model in changes WHERE the danger is, not how much of it there
+# is.
 #
-# Flat, not per ring, because the per-ring numbers today are upside down:
-#   heartland 0.81, marches 0.71, frontier 0.25, deeps 0.43 (18 contacts)
-# — the further out, the QUIETER — and the deeps' few contacts were mostly
-# bandits, beasts and goblins that had followed the company out. A hunting band
-# makes for the nearest hostile thing anywhere on the map (WorldAI._hunt_step),
-# the towns sit in the middle, so the bands pile up where the towns are.
-# Copying that shape would bake a safe frontier into the new model. The rings
-# already make a contact out there harder (Regions.power_scale builds the fight
-# at the ring's levels) and decide who it is (HOMES, below); how OFTEN is left
-# flat until the owner wants a shape (docs/spike-route-travel.md §7).
+# Flat, not per ring (and the owner's call, spike doc §7), because the per-ring
+# numbers today are upside down — the further out, the QUIETER:
+#   heartland 0.51, marches 0.41, frontier 0.32, deeps 0.18 (4 contacts)
+# and the far country's few contacts are largely bandits and goblins that
+# followed the company out. A hunting band makes for the nearest hostile thing
+# anywhere on the map (WorldAI._hunt_step), the towns sit in the middle, so the
+# bands pile up where the towns are. (The Unmapped's 3.41 is 28 contacts in
+# 8200 units, a thin sample at the map's rim.) The rings already make a contact
+# out there harder (Regions.power_scale builds the fight at the ring's levels)
+# and decide who it is (HOMES, below); how OFTEN stays flat.
 # MEASURED 2026-09-25, tests/sweep_route_travel.gd, small + large + procedural
-# seeds 1..4, 4 itineraries each, 30000 units walked per itinerary: 481 hostile
-# contacts in 720 400 units walked, 0.67 per 1000; mean cover x lure along the
-# same itineraries on the network 1.12; 0.67 / 1.12 = 0.60.
-const BASE := 0.6
+# seeds 1..4, 4 itineraries each, 30000 units walked per itinerary, on the maps
+# as they stand after "a lair for every people" and the Unmapped (#257): 340
+# hostile contacts in 720 113 units walked, 0.47 per 1000; mean cover x lure
+# along the same itineraries on the network 1.38; 0.47 / 1.38 = 0.34. (The
+# spike's first measurement, on the maps before #257, was 0.67 / 1.12 = 0.60:
+# fewer bands reach the company now, and more lairs lure.)
+const BASE := 0.34
 
 # One roll per this many units walked. Under the step a stretch of road is
 # one stretch; the chance per roll is 1 - e^(-rate * STEP / 1000).
@@ -276,10 +283,11 @@ static func candidates(world, pos: Vector2) -> Array:
 
 # --- the roll ------------------------------------------------------------------
 
-# The seed for one stretch of one edge on one world-day: the same stretch walked
-# twice in a day is the same stretch, and a reload is not a reroll.
-static func step_key(edge: String, offset: float, world_minutes: float) -> String:
-	return "%s|%d|%d" % [edge, int(floor(offset / STEP)), int(floor(world_minutes / FactionOpinion.DAY))]
+# The seed for one STEP of road: the edge it was walked on and how far the
+# company had walked, ever, when it was (World.route_walked, saved). Never the
+# same key twice on one walk, and the same key again after a reload.
+static func step_key(edge: String, walked: float) -> String:
+	return "%s|%d" % [edge, int(floor(walked / STEP))]
 
 # Chance that `walked` units of road at `pos` meet something.
 static func chance(world, pos: Vector2, walked := STEP) -> float:

@@ -897,6 +897,22 @@
       ],
       "camp": "%s sits with the others and is not really there."
     },
+    "grieving": {
+      "name": "Grieving",
+      "family": "wound",
+      "text": "Lost someone they were close to. Their mind is not always on the fight.",
+      "kind": "wound",
+      "lasts_days": 7,
+      "heals": "Seven days",
+      "effects": [
+        {
+          "gives": {
+            "to_hit": -1
+          }
+        }
+      ],
+      "camp": "%s keeps to the edge of the firelight and does not say the name."
+    },
     "maimed": {
       "name": "Maimed",
       "family": "wound",
@@ -1139,6 +1155,15 @@
       "label": "Watched a friend die",
       "resilience": "hardened",
       "scar": "shaken"
+    },
+    "bonded_died": {
+      "kind": "hardship",
+      "who": "bonded",
+      "ability": "wis",
+      "fear": false,
+      "label": "Lost someone close",
+      "resilience": "hardened",
+      "scar": "grieving"
     },
     "death_door": {
       "kind": "hardship",

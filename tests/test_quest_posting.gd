@@ -37,6 +37,7 @@ func _init() -> void:
 	test_raid_premium_and_rescue()
 	test_patron_and_renown()
 	test_the_whole_settlement_can_run_out_of_work()
+	test_quest_xp_is_the_countrys_fights()
 	FactionOpinion.reset()
 	print("test_quest_posting: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -329,6 +330,60 @@ func test_raid_premium_and_rescue() -> void:
 		"the rescue is from the raiding lair, and says who (%s)" % q.get("title", ""))
 	city.raided_by = ""
 	check(Posting.rescue_offer(city, w, p)["target_lair_id"] == near.id, "lifted, the nearest pens win again")
+
+# The design audit §5.3: a job's XP is N typical fights of the posting's own
+# country (Quest.XP_FIGHTS x Regions.fight_xp at the level a fight there is
+# pinned to), not its purse x2 — so renown and regard, which multiply the
+# purse, leave it alone, and the same job pays more XP further out.
+func test_quest_xp_is_the_countrys_fights() -> void:
+	Ladder.reset()
+	FactionOpinion.reset()
+	var w := _world()
+	var p := _party()
+	var city = w.settlements[0]
+	var jobs: Array = _at(city, p, w)
+	check(not jobs.is_empty(), "the city posts work")
+	var fx: int = Regions.fight_xp(Regions.level_here(w, city.position, p))
+	check(fx > 0, "a fight here is worth something (%d XP)" % fx)
+	var all_stamped := true
+	for q in jobs:
+		var want: int = Quest.xp_for(String(q["kind"]), fx, int(q.get("chain_tier", 0)))
+		if int(q["reward"].get("xp", -1)) != want or Quest.xp_reward(q) != want:
+			all_stamped = false
+			printerr("    %s: xp %s, want %d" % [q["id"], q["reward"].get("xp"), want])
+	check(all_stamped, "every job carries N fights of this country's XP")
+	# Renown multiplies the gold; the XP stays.
+	Ladder.deed("elf", 6)                             # Hirelings, +10 % gold
+	var dear: Array = _at(city, p, w)
+	var same := dear.size() == jobs.size()
+	for i in mini(dear.size(), jobs.size()):
+		same = same and int(dear[i]["reward"]["xp"]) == int(jobs[i]["reward"]["xp"])
+	check(same, "renown raises the purse and not the lesson")
+	Ladder.reset()
+	# Fight XP grows with the level a country pins a fight to, so the same kind
+	# of job teaches more in the Deeps than in the Heartland.
+	check(Regions.fight_xp(10) > 3 * Regions.fight_xp(1), "a level-10 fight is worth over three level-1 fights (%d vs %d)" % [Regions.fight_xp(10), Regions.fight_xp(1)])
+	check(Quest.xp_for("clear_lair", Regions.fight_xp(1)) == 3 * Regions.fight_xp(1), "clearing a lair is three fights' worth")
+	check(Quest.xp_for("clear_lair", 100, 2) == 500, "...and a chain's third job five")
+	# Turning it in pays exactly that, split the way a fight's is.
+	var q: Dictionary = jobs[0].duplicate(true)
+	q["state"] = "complete"
+	q["progress"] = int(q["required"])
+	if q["kind"] in ["collect_item", "supply_item"]:
+		p.stash_add(String(q["target_item_id"]), int(q["required"]))
+	var before := 0
+	for ch in p.party_characters():
+		before += int(ch.xp)
+	check(Quest.turn_in(p, q, city.faction), "the job turns in")
+	var after := 0
+	for ch in p.party_characters():
+		after += int(ch.xp)
+	var share: int = Quest.xp_reward(q) / p.party_characters().size()
+	check(after - before == share * p.party_characters().size(), "turn-in pays the stamped XP (%d of %d)" % [after - before, Quest.xp_reward(q)])
+	# A job with no stamp — a save from before, the linear run's curated list,
+	# a pack's story — pays the old purse rate.
+	check(Quest.xp_reward({"reward": {"gold": 120}}) == 120 * Quest.XP_PER_GOLD, "an unstamped job pays gold x2, as it always did")
+	check(Quest.xp_reward({"reward": {"gold": 120, "xp": 55}}) == 55, "a stamped one pays its stamp")
 
 func test_patron_and_renown() -> void:
 

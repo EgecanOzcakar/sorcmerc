@@ -319,7 +319,8 @@ func test_defeat() -> void:
 	check(not c4.resurrect("vera", "spell"), "no gold, no resurrection")
 	c4.party.add_gold(400)
 	check(c4.resurrect("vera", "spell", "ilsa"), "the campaign can raise the fallen")
-	check(not c4.party.get_member("vera").dead and c4.party.gold == 100, "raised, and 300 gp poorer")
+	check(not c4.party.get_member("vera").dead and c4.party.gold == 400 - Party.revive_cost(c4.party.get_member("vera")),
+		"raised, and her level's price poorer")
 
 # --- rest / merchant ------------------------------------------------------
 
@@ -616,7 +617,8 @@ func test_identification() -> void:
 
 	# stocked at every merchant, priced by the shared formula, and a treasure drop
 	var price := Campaign.item_price(Campaign.IDENTIFY_SCROLL)
-	check(price == 400, "the scroll prices as an uncommon item (got %d)" % price)
+	check(price == 100, "the scroll prices as a common item, the band loot drops it from (got %d)" % price)
+	check(Campaign.IDENTIFY_FEE_GP < price, "...and the librarian is still the cheaper door")
 	check(price < Campaign.item_price(Campaign.SCROLL), "cheaper than the resurrection scroll")
 	var g := _campaign()
 	g.enter(_find(g, "merchant"))

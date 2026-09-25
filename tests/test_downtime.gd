@@ -119,7 +119,7 @@ func test_train() -> void:
 	check(not Downtime.can_train(party, vera), "a level-3 hero has nothing to learn yet")
 	_level(party, 4)
 	check(Downtime.can_train(party, vera), "at level 4 the trainer will take them")
-	check(Downtime.train_cost(vera) == Downtime.TRAIN_COST_BASE + Downtime.TRAIN_COST_PER_LEVEL * 4, "150 + 50 a level")
+	check(Downtime.train_cost(vera) == 550 and Downtime.train_cost(vera) == Downtime.TRAIN_COST_BASE + Downtime.TRAIN_COST_PER_LEVEL * 4, "150 + 100 a level: 550 at level 4")
 	var pool: Array = Downtime.trainable(vera)
 	check(not pool.is_empty(), "there are feats to learn")
 	var all_general := true
@@ -162,10 +162,25 @@ func test_train() -> void:
 	check(r["feat_name"] == Catalog.feat_src(feat)["name"] and r["days"] == Downtime.TRAIN_DAYS and r["cost"] == fee, "the row reports what it took")
 	check("Five days with a master-at-arms, and Vera Kord comes out of it with %s." % r["feat_name"] in r["text"], "the copy")
 	check(party.gold == 0 and is_equal_approx(w.clock.elapsed, before + Downtime.TRAIN_DAYS * Downtime.DAY), "five days and the fee, and the bed")
-	check(not Downtime.can_train(party, vera) and Downtime.train(party, w, city, vera, Downtime.trainable(vera)[0]).is_empty(), "once per hero, ever")
+	check(not Downtime.can_train(party, vera) and Downtime.train(party, w, city, vera, Downtime.trainable(vera)[0]).is_empty(), "once a tier: not twice at level 4")
 	check(Downtime.train(party, w, city, party.get_member("pike"), "alert").is_empty(), "an origin feat is refused")
 	check(Downtime.train(party, w, city, party.get_member("pike"), "no-such-feat").is_empty(), "so is nonsense")
 	check(Ach.count("trained") == 1 and Ach.is_unlocked("trained_first"), "Schooled")
+
+	# The design audit §5.1b: a sink that scales with level, to the end. One
+	# feat at 4, 8, 12, 16 and 20, each priced at the hero's level then.
+	check(Downtime.trains_allowed(3) == 0 and Downtime.trains_allowed(4) == 1 and Downtime.trains_allowed(7) == 1
+		and Downtime.trains_allowed(8) == 2 and Downtime.trains_allowed(16) == 4 and Downtime.trains_allowed(20) == 5,
+		"one trained feat per four levels from level 4")
+	_level(party, 8)
+	check(Downtime.can_train(party, vera), "at level 8 the trainer takes her again")
+	var fee8: int = Downtime.train_cost(vera)
+	check(fee8 == 950 and fee8 > fee, "...at the level-8 price, 950 ◉ (%d)" % fee8)
+	var second: String = Downtime.trainable(vera)[0]
+	party.gold = fee8 + Downtime.bed_cost(city, Downtime.TRAIN_DAYS)
+	check(Downtime.train(party, w, city, vera, second).get("ok", false) and second in vera.feats, "a second feat, five more days")
+	check(Downtime.trained_count(party, vera) == 2 and not Downtime.can_train(party, vera), "and not a third until level 12")
+	check(Array(party.downtime["trained"]).count("vera") == 2, "the save's list holds her once per feat")
 
 # --- carousing ------------------------------------------------------------
 

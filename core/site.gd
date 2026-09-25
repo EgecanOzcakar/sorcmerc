@@ -645,8 +645,8 @@ func leave() -> void:
 	if was_boss or depth >= rooms.size():
 		state = "cleared"
 		# The stash is spent and the marker greys out — and the respawn clock
-		# starts, so something can move back in a day from now
-		# (core/world_lairs.gd's RESPAWN).
+		# starts, so something can move back in a day from now (three on the
+		# Frontier, five in the Deeps: core/world_lairs.gd's respawn_after).
 		WorldLairs.mark_cleared(lair, world.clock.elapsed if world != null else -1.0)
 		# #231: and its people remember who did it (core/grudges.gd).
 		var Grudges = load("res://core/grudges.gd")

@@ -103,19 +103,18 @@ const UNDROPPABLE_RARITIES := ["artifact"]
 # stock, not something a goblin was carrying. tests/test_loot.gd checks every id
 # here resolves in the catalog.
 #
-# potions-of-healing sits in the UNCOMMON band rather than the obvious common
-# one because of how it USED to be priced: the SRD files healing/greater/
+# potions-of-healing sits in the COMMON band, beside the scroll. It used to sit
+# one band up because of how it was priced: the SRD files healing/greater/
 # superior under one heading, so its rarity is "varies", which core/campaign.gd
 # priced as rare (VARIES_TIER) — 2025 gp, and handing that to a party for
 # killing a CR 1/8 bandit was a purse, not a healing potion. Since 2026-09-24
 # it is priced flat at 50 ◉ (Campaign.PRICE_OVERRIDE, the design audit §1.4),
-# so that reason is gone.
-# ponytail: it still drops one band up. Moving it to "common" changes what the
-# lowest-CR kills hand out, which is a loot-table call for the economy pass
-# (the audit's §5.1), not a pricing fix; revisit there.
+# and the economy pass (§5.1, docs/plan/2026-09-25-coin-and-xp.md) moved it
+# down: the bandit's healing draught is the most ordinary thing he could have
+# been carrying, and at 50 ◉ it is a cure, not a purse.
 const CONSUMABLE_BANDS := {
-	"common":    ["scroll-of-identification"],
-	"uncommon":  ["potions-of-healing", "potion-of-animal-friendship", "potion-of-growth",
+	"common":    ["scroll-of-identification", "potions-of-healing"],
+	"uncommon":  ["potion-of-animal-friendship", "potion-of-growth",
 		"potion-of-resistance"],
 	"rare":      ["potion-of-heroism", "potion-of-invisibility", "potion-of-mind-reading",
 		"potion-of-gaseous-form", "potion-of-clairvoyance"],

@@ -242,7 +242,10 @@ func _init() -> void:
 	# waystone, no dead companies in the farmed heartland.
 	var p11 := _party()
 	var deeps := _world_out(0.95)
-	check(Regions.band_of(deeps, deeps.player().position) == "deeps", "the test party really is in the deeps")
+	# 0.95 is the Far Deeps' outer half, the Unmapped: a card listed for "deeps" is
+	# asked of the country, so it still holds out here (Regions.holds).
+	check(Regions.band_of(deeps, deeps.player().position) == "unmapped", "the test party really is at the far edge")
+	check(Regions.within(deeps, deeps.player().position, "deeps"), "...which is still the Far Deeps")
 	var settled_out_there := 0
 	var wilds_out_there := 0
 	for seed_v in range(1, 300):

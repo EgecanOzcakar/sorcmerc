@@ -9,9 +9,11 @@
 #
 # The "☠" glyph this used to fall back to is gone with the rest of the 2D prop
 # tier. It cannot come back: a flat glyph pasted over a map whose camera turns
-# has no place to stand. Every lair the game can produce has a kit (the five ids
-# in LairKit.LAIRS, which is also the whole of procedural_world.gd's list), so
-# there is nothing left for it to cover.
+# has no place to stand. Every lair the game can produce has a kit: the five
+# ids in LairKit.LAIRS have their own, and every other one — the lairs
+# core/world_homes.gd places, a content pack's, a raid's outpost — gets its
+# faction's (LairKit.build_for, 2026-09-25). Before that a pack's lair drew
+# nothing but its name.
 extends "res://scenes/world/props3d.gd"
 
 const LairKit := preload("res://scenes/world/lair_kit.gd")
@@ -79,20 +81,23 @@ func reset(world) -> void:
 # exists to normalise a GLB whose raw scale is whatever Meshy generated it at.
 func _build(l) -> Node3D:
 	if not _wants_model(l):
-		return LairKit.build(l.id)
+		return LairKit.build_for(l.id, l.faction)
 	var scene := _model(_model_path(l))
 	if scene != null:
 		var m := scene.instantiate()
 		_fit_height(m, TARGET_HEIGHT)
 		return m
-	return LairKit.build(l.id) if LairKit.has(l.id) else null
+	return LairKit.build_for(l.id, l.faction)
 
 
 # Whether this lair's GLB is going to be read at all. It used to be loaded
 # unconditionally and then discarded when the kit won, which with source ==
 # "kit" — the default — meant every lair on the map paid for a model nothing
-# ever drew.
+# ever drew. A lair with no MODELS row has no file to read whatever the
+# source says, and goes straight to its faction's kit (LairKit.build_for).
 func _wants_model(l) -> bool:
+	if _model_path(l) == "":
+		return false
 	return not (source == "kit" and LairKit.has(l.id))
 
 

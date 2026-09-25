@@ -137,9 +137,19 @@ func _init() -> void:
 	var par_ok := _until(rich, _foe("bandit"), "parley", true)
 	check(not bool(par_ok["fight"]), "a parley that lands means no fight")
 	check(int(par_ok["toll"]) > 0 and rich.gold < 500, "...and it is paid for (%d)" % int(par_ok["toll"]))
+	# The owner's call on the audit's §3.1 follow-up (2026-09-25): a people
+	# that keeps no opinion has nothing to think less of the company with, so a
+	# failed parley hands it the first round instead — the same surprise a
+	# blown ambush hands over. Without a cost, parley is a free roll before
+	# Engage against everything that talks.
 	var par_no := _until(_party(), _foe("bandit"), "parley", false)
-	check(bool(par_no["fight"]) and not bool(par_no["forced_ambush"]),
-		"a failed parley is a plain fight, not a disaster")
+	check(bool(par_no["fight"]) and bool(par_no["forced_ambush"]),
+		"a failed parley with bandits gives them the first round")
+	check(not bool(par_no["scouted_ahead"]), "...and the company is not also the one with the drop")
+	check(String(par_no["text"]).contains("still talking"), "...and the line says so: %s" % par_no["text"])
+	var band_row: Dictionary = Approach.options(_party(), _foe("goblinoid")).filter(func(o): return o["id"] == "parley")[0]
+	check(String(band_row["lose"]).contains("first round"),
+		"the goblins' row states the cost before the press: %s" % band_row["lose"])
 
 	# The design audit §3.1: a failed parley with a people that keeps an opinion
 	# costs the company with them — and says so on the row before the press and
@@ -158,6 +168,7 @@ func _init() -> void:
 		"a failed parley lowers the humans' opinion by %.0f (%.1f)" % [FactionOpinion.PARLEY_REFUSED, FactionOpinion.get_opinion("human")])
 	check(bool(ins["fight"]) and float(ins.get("opinion", 0.0)) == -FactionOpinion.PARLEY_REFUSED,
 		"...it is still the fight, and the result carries the cost")
+	check(not bool(ins["forced_ambush"]), "...and a people that keeps an opinion pays in opinion, not in the first round")
 	check(String(ins["text"]).contains("insult") and String(ins["text"]).contains("humans"),
 		"...and says so in the line: %s" % ins["text"])
 	print("  failed parley: ", ins["text"])
@@ -186,6 +197,34 @@ func _init() -> void:
 	var t_broke := _until(broke, _foe("bandit"), "parley", true)
 	check(int(t_broke["toll"]) <= 3 and broke.gold >= 0,
 		"nobody is charged gold they do not have (%d)" % int(t_broke["toll"]))
+
+	# The audit §1.8: an empty purse is not a free toll. They take one thing
+	# out of the packs, named on the row before the press, and it is the thing
+	# the resolution takes. Never quest goods.
+	var empty_p := _party(); empty_p.gold = 0
+	empty_p.stash_add("potions-of-healing", 1)
+	empty_p.stash_add("goblin-ear", 3)
+	empty_p.quests.append({"id": "ears", "kind": "collect_item", "state": "active",
+		"target_item_id": "goblin-ear", "required": 3, "progress": 3, "title": "Ears"})
+	var bandit = _foe("bandit")
+	check(Approach.toll_item(empty_p, bandit) == "potions-of-healing",
+		"the toll item is never quest goods (%s)" % Approach.toll_item(empty_p, bandit))
+	var e_row: Dictionary = Approach.options(empty_p, bandit).filter(func(o): return o["id"] == "parley")[0]
+	check(String(e_row.get("toll_item", "")) == "potions-of-healing" and String(e_row["win"]).contains("from the packs"),
+		"an empty purse's row names what they will take: %s" % e_row["win"])
+	var e_paid := _until(empty_p, bandit, "parley", true)
+	check(String(e_paid.get("toll_item", "")) == "potions-of-healing" and empty_p.stash_count("potions-of-healing") == 0,
+		"...and the parley takes exactly that: %s" % e_paid.get("text", ""))
+	check(empty_p.stash_count("goblin-ear") == 3, "...leaving the quest's ears in the pack")
+	var again := Approach.toll_item(empty_p, bandit)
+	check(again == "", "with only quest goods left, there is nothing they will take (%s)" % again)
+	var two := _party(); two.gold = 0
+	for id in ["longsword", "shortsword", "handaxe", "dagger"]:
+		two.stash_add(id)
+	check(Approach.toll_item(two, bandit) == Approach.toll_item(two, bandit),
+		"the pick is seeded: the same band at the same minute takes the same thing")
+	var rich_row: Dictionary = Approach.options(flush2, bandit).filter(func(o): return o["id"] == "parley")[0]
+	check(not rich_row.has("toll_item"), "a purse with coin in it pays coin, not gear")
 
 	# --- standing orders reach in here too ---------------------------------
 	# D3's orders decide who rolls, and the pace rides on top — so a careful

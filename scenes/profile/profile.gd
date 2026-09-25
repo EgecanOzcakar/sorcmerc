@@ -19,9 +19,11 @@ const Presets = preload("res://core/presets.gd")
 const Leveling = preload("res://core/leveling.gd")
 const Ach = preload("res://core/achievements.gd")
 const Potions = preload("res://core/potions.gd")
+const PassItems = preload("res://core/rules/pass_items.gd")
 const RoadSpells = preload("res://core/road_spells.gd")
 const Adapter = preload("res://core/adapter.gd")   # audit 4.1: the one reading of slots
 const Traits = preload("res://core/traits.gd")
+const Service = preload("res://core/service.gd")   # audit 2.2: the service record
 
 const ABIL := ["str", "dex", "con", "int", "wis", "cha"]
 const ABIL_NAME := {"str": "STR", "dex": "DEX", "con": "CON", "int": "INT", "wis": "WIS", "cha": "CHA"}
@@ -124,6 +126,7 @@ func _render() -> void:
 	_abilities(c1, s)
 	_defense(c1, s)
 	_saves(c1, s)
+	_service(c1)
 	var c2 := _column()
 	_skills(c2, s)
 	_traits(c2)
@@ -405,6 +408,19 @@ func _traits(col: VBoxContainer) -> void:
 		t.custom_minimum_size = Vector2(220, 0)
 		t.theme_type_variation = "Dim"
 		v.add_child(t)
+		# Audit 2.2: an earned trait's reason and in-world day, stored on it
+		# since it was earned and never shown — "Earned on day 4: 10 goblins
+		# killed." A trait they were born with says nothing here.
+		var origin := Service.origin_line(_ch, id)
+		if origin != "":
+			var o := Label.new()
+			o.text = origin
+			o.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			o.custom_minimum_size = Vector2(220, 0)
+			o.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
+			o.add_theme_color_override("font_color", COL_GOLD)
+			v.add_child(o)
+			_fields["trait_origin_" + id] = o
 		for line in Traits.effect_lines(id):
 			var e := Label.new()
 			e.text = "·  " + String(line["text"]) + ("" if line["live"] else "   (not yet in play)")
@@ -424,6 +440,51 @@ func _traits(col: VBoxContainer) -> void:
 			m.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
 			m.add_theme_color_override("font_color", Icons.COL_MUTED)
 			v.add_child(m)
+
+# Audit 2.2: the service record (core/service.gd). What they have done — fights
+# and wins, times put down, kills by faction — and how far each bane and
+# Veteran are, read off the same counts and caps core/traits.gd earns them by,
+# so the page never promises a mark the rules would not give. A held bane or
+# Veteran is gold; a count the caps block says why. Keys: service_fights,
+# service_downs, service_kills, service_runs, bane_<faction>, service_veteran.
+func _service(col: VBoxContainer) -> void:
+	var v := _panel(col, "Service")
+	var r := Service.record(_ch)
+	var p := Service.progress(_ch)
+	_row(v, "Fights", "%d, %d won" % [int(r["fights"]), int(r["wins"])], "service_fights")
+	_row(v, "Put down", str(int(r["downs"])), "service_downs")
+	_row(v, "Kills", str(int(r["kills_total"])), "service_kills")
+	if int(r["runs"]) > 1:
+		_row(v, "Companies served", str(int(r["runs"])), "service_runs")
+	for b in p["banes"]:
+		var f := String(b["faction"])
+		var right := ""
+		var tint := COL_TEXT
+		if bool(b["held"]):
+			right = "%d, %s" % [int(b["kills"]), String(b["name"])]
+			tint = COL_GOLD
+		elif String(b["room"]) != "":
+			right = "%d/%d, %s" % [int(b["kills"]), int(b["need"]), String(b["room"])]
+			tint = COL_DIM
+		elif int(b["kills"]) >= int(b["need"]):
+			right = "%d/%d, a bane at the next kill" % [int(b["kills"]), int(b["need"])]
+			tint = COL_ACCENT
+		else:
+			right = "%d/%d toward %s" % [int(b["kills"]), int(b["need"]), String(b["name"])]
+		_row(v, "  " + Traits.faction_name(f).capitalize(), right, "bane_" + f, tint)
+	var vet: Dictionary = p["veteran"]
+	var vright := "%d/%d wins" % [int(vet["wins"]), int(vet["need"])]
+	var vtint := COL_TEXT
+	if bool(vet["held"]):
+		vright = "earned, %d wins" % int(vet["wins"])
+		vtint = COL_GOLD
+	elif String(vet["room"]) != "":
+		vright += ", " + String(vet["room"])
+		vtint = COL_DIM
+	elif int(vet["wins"]) >= int(vet["need"]):
+		vright += ", Veteran at the next win"
+		vtint = COL_ACCENT
+	_row(v, "Veteran", vright, "service_veteran", vtint)
 
 func _features(col: VBoxContainer, s) -> void:
 	var v := _panel(col, "Features")
@@ -500,6 +561,10 @@ func _item_tile(g: GridContainer, iid: String, def: Dictionary, kind: String, qt
 		g.add_child(m)
 		return
 	tip = Icons.item_tooltip(iid, def, kind)
+	if equipped:   # a worn magic item past the attunement limit, or outclassed (core/rules/pass_items.gd)
+		var note: String = PassItems.worn_note(_ch, iid)
+		if note != "":
+			tip += "\n" + note
 	if not equipped and Potions.is_potion(iid):
 		# A potion is drunk, not worn: heal now, or a buff the next fight inherits.
 		tip += "\n%s\n\nClick: drink" % Potions.text(iid)

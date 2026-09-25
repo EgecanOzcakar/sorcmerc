@@ -28,7 +28,7 @@ const Posting = preload("res://core/quest_posting.gd")
 const Potions = preload("res://core/potions.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Ach = preload("res://core/achievements.gd")
-const Party = preload("res://core/party.gd")   # #109: REVIVE_COST, for the healer's raise
+const Party = preload("res://core/party.gd")   # #109: revive_cost, for the healer's raise
 const Ladder = preload("res://core/ladder.gd")
 const Loot = preload("res://core/loot.gd")      # not a cycle: loot.gd only preloads catalog.gd
 const WorldRest = preload("res://core/world_rest.gd")   # audit 1.7: the night is walked, not jumped
@@ -213,6 +213,7 @@ static func haggle(m: Dictionary, party, rng = null) -> Dictionary:
 # haggle changes what THIS conversation agreed to, not the shelf itself).
 static func apply_haggle(m: Dictionary, mult: float) -> void:
 	m["markup"] = float(m.get("markup", 1.0)) * mult
+	m["haggle"] = float(m.get("haggle", 1.0)) * mult   # sell_price reads it the other way round
 	for e in m.get("stock", []):
 		e["price"] = maxi(1, int(round(int(e["price"]) * mult)))
 
@@ -385,14 +386,26 @@ static func buy(m: Dictionary, party, item_id: String) -> bool:
 	m["stock"] = m["stock"].filter(func(e): return e["item_id"] != item_id)
 	return true
 
-# Sell price follows the same market swing the buy price does.
+# What the counter pays for the party's goods: SELL_RATE of list (a fifth,
+# Campaign.SELL_RATE says why), then what they think of you and how the talk
+# went, each the right way round for a sale.
+#
+# The shelf's own markup does NOT reach it. A thin shelf or a fight nearby
+# makes a market dear to buy from; it does not pay a premium for your goods.
+# Until 2026-09-25 the sale read min(1, markup), and the markup carries the
+# opinion factor, so the one thing that ever moved it was being LIKED — a
+# beloved town paid 30% of list (the design audit §5.6). Now opinion is read on
+# its own and inverted (FactionOpinion.sell_factor): a friend pays up to 40%
+# more, a people who dislike you up to 40% less. A won haggle is the same: it
+# took 15% off what they charge, so it puts 15% on what they pay (`haggle`,
+# stamped by apply_haggle; a lost one takes 10% off both).
 static func sell_price(m: Dictionary, item_id: String, party = null) -> int:
 	var list := Campaign.item_price(item_id)
 	# #176 step 4: a Generous hero in the company lets things go cheap (−10%).
 	var pct: int = Traits.party_pct(party, "sale_price") if party != null else 0
-	# A thin shelf is dear to buy from; it does not pay a premium for your goods.
-	return 0 if list <= 0 else maxi(1, int(round(list * SELL_RATE * minf(1.0, float(m.get("markup", 1.0)))
-		* (100 + pct) / 100.0)))
+	var talk: float = 2.0 - float(m.get("haggle", 1.0))
+	return 0 if list <= 0 else maxi(1, int(round(list * SELL_RATE
+		* FactionOpinion.sell_factor(float(m.get("opinion", 0.0))) * talk * (100 + pct) / 100.0)))
 
 static func sell(m: Dictionary, party, item_id: String) -> bool:
 	var paid := sell_price(m, item_id, party)
@@ -596,15 +609,17 @@ static func raise_dead(party, id: String) -> Dictionary:
 	var ch = party.get_member(id)
 	if ch == null or not ch.dead:
 		return {"ok": false, "text": "Nobody by that name needs raising."}
-	if not party.spend_gold(Party.REVIVE_COST):
-		return {"ok": false, "cost": Party.REVIVE_COST,
-			"text": "The healer wants %d ◉ up front to raise %s." % [Party.REVIVE_COST, ch.cname]}
+	# Audit §5.2: priced by the hero's level (Party.revive_cost), not flat.
+	var cost: int = Party.revive_cost(ch)
+	if not party.spend_gold(cost):
+		return {"ok": false, "cost": cost,
+			"text": "The healer wants %d ◉ up front to raise %s." % [cost, ch.cname]}
 	ch.dead = false
 	ch.hp_current = 1
 	ch.dirty()
 	Ach.bump("resurrections")
-	return {"ok": true, "cost": Party.REVIVE_COST,
-		"text": "%s draws breath again (-%d ◉). Barely." % [ch.cname, Party.REVIVE_COST]}
+	return {"ok": true, "cost": cost,
+		"text": "%s draws breath again (-%d ◉). Barely." % [ch.cname, cost]}
 
 static func heal(party) -> Dictionary:
 	var hurt: Array = []

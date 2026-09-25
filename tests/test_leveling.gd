@@ -323,8 +323,30 @@ func _xp_gate() -> void:
 	ch.xp = 600
 	check(Leveling.can_level_up(ch), "hitting the threshold unlocks level-up")
 	check(Leveling.xp_to_next(ch) == 0, "eligible characters need 0 more")
-	check(Leveling.xp_for_level(1) == 0 and Leveling.xp_for_level(20) == 19000,
-		"the table spans 1..20")
+	check(Leveling.xp_for_level(1) == 0 and Leveling.xp_for_level(20) == 14500,
+		"the table spans 1..20 (%d at 20)" % Leveling.xp_for_level(20))
+	# The design audit §5.4: levels 1-10 cost what they always did (every step
+	# XP_PER_LEVEL more than the last), and past 10 every level costs what
+	# level 10 did, so the late game takes fewer fights a level as fight XP
+	# keeps climbing.
+	var old_curve := true
+	for l in range(1, 12):
+		old_curve = old_curve and Leveling.xp_for_level(l) == Leveling.XP_PER_LEVEL * l * (l - 1) / 2
+	check(old_curve, "levels 1-11 read the old table exactly, so no banked total changes level")
+	var flat := true
+	for l in range(Leveling.LATE_LEVEL, Leveling.MAX_LEVEL):
+		flat = flat and Leveling.xp_for_level(l + 1) - Leveling.xp_for_level(l) == Leveling.XP_PER_LEVEL * Leveling.LATE_LEVEL
+	check(flat, "every step from level 10 on costs 1,000")
+	# Fewer fights a level late: an easy open-country fight split three ways
+	# (Regions.fight_xp), the pace the header's table quotes.
+	var Regions = load("res://core/regions.gd")
+	var per := func(l: int) -> float:
+		return float(Leveling.xp_for_level(l + 1) - Leveling.xp_for_level(l)) / (Regions.fight_xp(l) / 3.0)
+	check(per.call(19) < per.call(10) * 0.6, "a level at 19 takes well under the fights one at 10 does (%.1f vs %.1f)" % [per.call(19), per.call(10)])
+	var deeps := 0.0
+	for l in range(10, 20):
+		deeps += per.call(l)
+	check(deeps < 60.0, "levels 10-20 take ~52 fights, not ~73 (%.1f)" % deeps)
 
 	var p = load("res://scenes/profile/profile.tscn").instantiate()
 	root.add_child(p)

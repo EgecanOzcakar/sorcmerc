@@ -17,6 +17,13 @@
 #    Visit.rest(), let go here once the camp is made). Alarm is held the same
 #    way and, like Rope Trick, is spent by the camp it was cast for — it used
 #    to wait, ward up, through every quiet night until one was not.
+#  - The hermit's hollow (core/landmarks.gd) is the one camp that is not
+#    rolled for: `party.hollow_camp`, its own flag since 2026-09-25, spares
+#    the kit AND the ambush roll, because the hermit's whole gift is a place
+#    nothing finds. It used to share Rope Trick's flag, so when §1.6 put the
+#    ambush back on a roped night it went back on the hollow's too. A hollow
+#    camp is still a long rest behind the 24-hour gate and still refused with
+#    a band in reach; it only skips the dice.
 #  - §1.7: no camp with a hostile band in reach, the same refusal the map's
 #    short rest has always made (hostile_near()), and the eight hours of a
 #    quiet night are walked by the world (core/world_rest.gd).
@@ -64,10 +71,11 @@ static func hostile_near(world, radius: float) -> bool:
 
 const TIRED_TEXT := "The company is not tired enough for another long rest yet."
 const HOSTILE_TEXT := "Too dangerous to make camp here: something hostile is close."
-const NO_KIT_TEXT := "There is no camp kit in the stash, and no Rope Trick cast."
+const NO_KIT_TEXT := "There is no camp kit in the stash, no Rope Trick cast, and no hollow to sleep in."
 
-# Make camp: refuse (nothing spent) or spend the kit or the Rope Trick, then roll
-# the night off camp_seed(). A quiet night is the long rest, with the world
+# Make camp: refuse (nothing spent) or spend the hollow, the kit or the Rope
+# Trick, then roll the night off camp_seed() — unless it is the hermit's
+# hollow, which is never jumped. A quiet night is the long rest, with the world
 # walking through it; an ambush is no rest at all, and the watch — or Alarm,
 # which hears it whatever the watch rolled — says who gets the first round.
 # Either way the camp spells are spent and their holds let go. `rng` rides out
@@ -79,10 +87,15 @@ static func make_camp(party, world, radius: float, each := Callable(), ambush_pc
 		return {"ok": false, "why": "tired", "text": TIRED_TEXT}
 	if hostile_near(world, radius):
 		return {"ok": false, "why": "hostile", "text": HOSTILE_TEXT}
-	var roped: bool = party.safe_camp
-	if not roped and party.stash_count(CAMP_KIT_ITEM) < 1:
+	# The hollow first: it is the better night, and it is what the hermit's
+	# directions were for. A Rope Trick up as well is spent with it (the camp
+	# it was cast for is made), and its hold let go below.
+	var hollow: bool = party.hollow_camp
+	var roped: bool = party.safe_camp and not hollow
+	if not hollow and not roped and party.stash_count(CAMP_KIT_ITEM) < 1:
 		return {"ok": false, "why": "kit", "text": NO_KIT_TEXT}
-	if roped:
+	if hollow or roped:
+		party.hollow_camp = false
 		party.safe_camp = false
 	else:
 		party.stash_remove(CAMP_KIT_ITEM, 1)
@@ -91,7 +104,10 @@ static func make_camp(party, world, radius: float, each := Callable(), ambush_pc
 	Ach.bump("camps")
 	var p = world.player()
 	var rng := RNG.new(camp_seed(world.clock.elapsed, p.position if p != null else Vector2.ZERO))
-	var out := {"ok": true, "roped": roped, "alarm": alarm, "rng": rng, "ambush": ambush_roll(rng, ambush_pct)}
+	# The hollow is not rolled for at all, so its night draws nothing off the
+	# stream: the fireside after it reads the same dice a kit's quiet night would.
+	var out := {"ok": true, "roped": roped, "hollow": hollow, "alarm": alarm, "rng": rng,
+		"ambush": false if hollow else ambush_roll(rng, ambush_pct)}
 	if not out["ambush"]:
 		out["rest"] = Visit.rest(party, world, "long-rest", each)
 	else:

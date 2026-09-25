@@ -43,7 +43,7 @@ const FILE := "effects/casters.json"
 # level, the Frontier 3rd, the Far Deeps anything it knows. Keyed by
 # core/regions.gd's band ids; SLOT_CAP_BY_LEVEL is the same table read off a
 # party level, for a fight with no map under it (a sweep, the linear route).
-const SLOT_CAP := {"heartland": 2, "marches": 2, "frontier": 3, "deeps": 9}
+const SLOT_CAP := {"heartland": 2, "marches": 2, "frontier": 3, "deeps": 9, "unmapped": 9}
 const SLOT_CAP_BY_LEVEL := [[6, 2], [9, 3], [99, 9]]   # [top party level, cap]
 
 # The least tier at which a caster is fielded at all. MEASURED 2026-09-24

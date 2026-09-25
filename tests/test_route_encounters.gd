@@ -52,8 +52,9 @@ func _rings() -> void:
 		by[c["faction"]] = float(c["rate"])
 	check(is_equal_approx(by.get("bandit", 0.0), by.get("goblinoid", -1.0)), "rings: equal KINDS weight, equal share")
 	# The ring decides who and how strong, not how often (BASE's comment).
-	var deep := Vector2(0, 2300)
-	check(RouteEncounters.factors(w, deep)["ring"] == "deeps", "rings: (0,2300) is the deeps")
+	# frac 0.9: past the frontier (0.87), short of the Unmapped (0.94).
+	var deep := Vector2(0, 2160)
+	check(RouteEncounters.factors(w, deep)["ring"] == "deeps", "rings: (0,2160) is the deeps")
 	check(is_equal_approx(RouteEncounters.rate(w, deep), RouteEncounters.rate(w, quiet)), "rings: as busy as the heartland")
 	for c in RouteEncounters.candidates(w, deep):
 		check(Regions.HOMES["deeps"].has(c["faction"]), "rings: %s lives in the deeps" % c["faction"])
@@ -119,10 +120,12 @@ func _rolls() -> void:
 	check(absf(fired - expect) < 4.0 * sqrt(expect), "roll: %d fired, %.0f expected" % [fired, expect])
 	check(is_equal_approx(RouteEncounters.chance(w, at, 0.0), 0.0), "roll: no road walked, no chance")
 	# Keys: the same stretch on the same day, a new one the next step or day.
-	var k0 := RouteEncounters.step_key("x~y", 150.0, 100.0)
-	check(k0 == RouteEncounters.step_key("x~y", 199.0, 1400.0), "key: same stretch, same day")
-	check(k0 != RouteEncounters.step_key("x~y", 250.0, 100.0), "key: the next stretch")
-	check(k0 != RouteEncounters.step_key("x~y", 150.0, 100.0 + FactionOpinion.DAY), "key: the next day")
+	# Keys: one per STEP of the odometer — the same count (a reload) is the same
+	# key, the next STEP walked is a new one even back on the same edge.
+	var k0 := RouteEncounters.step_key("x~y", 150.0)
+	check(k0 == RouteEncounters.step_key("x~y", 199.0), "key: the same STEP of the odometer, the same key")
+	check(k0 != RouteEncounters.step_key("x~y", 250.0), "key: the next STEP walked, a new key")
+	check(k0 != RouteEncounters.step_key("a~b", 150.0), "key: another edge, another key")
 
 func _compose() -> void:
 	FactionOpinion.reset()
@@ -163,7 +166,7 @@ func _grudge() -> void:
 	Grudges.reset()
 	var w := _world()
 	var home := Vector2(0, 900)          # heartland: goblins' country
-	var away := Vector2(0, 2300)         # the deeps: not theirs
+	var away := Vector2(0, 2300)         # the far country: not theirs
 	var calm := RouteEncounters.rate(w, home)
 	Grudges.set_grudge("goblinoid", 80.0)
 	var f: Dictionary = RouteEncounters.factors(w, home)

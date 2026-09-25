@@ -1,7 +1,8 @@
 # T9x: procedural world generation — a seeded alternative to the two
 # hand-placed maps (World._small_world()/LargeWorld.build()). Same content
 # types (one settlement per civilized race, roaming monster-faction parties,
-# all five named lairs, one lake), placed by a deterministic RNG instead of
+# all five named lairs plus a lair for every other people (core/world_homes.gd),
+# one lake), placed by a deterministic RNG instead of
 # by hand. Two real constraints, not just scattered dots: settlements keep a
 # minimum distance apart (no two capitals on top of each other), and every
 # monster-faction party/lair keeps its own minimum distance from every
@@ -16,6 +17,7 @@ const RNG = preload("res://core/rng.gd")
 const Regions = preload("res://core/regions.gd")
 const Landmarks = preload("res://core/landmarks.gd")
 const WorldBands = preload("res://core/world_bands.gd")
+const WorldHomes = preload("res://core/world_homes.gd")
 
 const SPAN := 1400.0                  # settlements/lairs scatter within +/- this, world units
 const MIN_SETTLEMENT_GAP := 500.0     # no two settlements closer than this
@@ -123,6 +125,10 @@ static func build(seed_v: int = 0) -> World:
 	# against the settlements alone, which is what keeps the extent stable: every
 	# lair is placed INSIDE that extent, so placing them cannot move the seams
 	# they were placed against.
+	#
+	# The whole COUNTRY's ring (Regions.country_fracs), not the home band's: the
+	# Far Deeps became two bands on 2026-09-25, and the dragon's cave keeps the
+	# span it was always drawn from, so every seed places these five where it did.
 	var anchor: Vector2 = settlement_pos[RACES.find("human")]
 	var ext := Regions.MIN_EXTENT
 	for p in settlement_pos:
@@ -130,7 +136,7 @@ static func build(seed_v: int = 0) -> World:
 	for entry in LAIRS:
 		var band := Regions.home_band(String(entry[1]))
 		var pos := _place_in_ring(rng, settlement_pos, MIN_MONSTER_GAP, anchor,
-			Regions.ring_fracs(band), ext)
+			Regions.country_fracs(band), ext)
 		w.add_lair(World.Lair.new(String(entry[0]), pos, String(entry[1]), String(entry[2])))
 
 	# One lake — same "water is a hand-placed blob" vocabulary the other two
@@ -165,5 +171,9 @@ static func build(seed_v: int = 0) -> World:
 		lerpf(BIOME_R_MIN, BIOME_R_MAX, _randf(rng)), "marsh")
 
 	Landmarks.place(w, seed_v + 1)
+	# A lair for every people (core/world_homes.gd): after the landmarks, so their
+	# count (LANDMARKS_PER_LAIR) and every spot they took stay what this seed
+	# always made, and on its own seed, so the five above do too.
+	WorldHomes.fill(w, seed_v + 3, MIN_MONSTER_GAP)
 	WorldBands.seed(w, seed_v + 2, MIN_MONSTER_GAP)   # #163: last, so the water is already stamped
 	return w

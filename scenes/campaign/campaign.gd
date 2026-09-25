@@ -421,21 +421,21 @@ func _fallen_panel(fallen: Array) -> Control:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 6)
 	panel.add_child(col)
-	col.add_child(_caption("The fallen, %d ◉ to raise one" % Party.REVIVE_COST))
+	col.add_child(_caption("The fallen, %d ◉ a level to raise" % Party.REVIVE_PER_LEVEL))
 	var caster := Party.resurrection_caster(party)
 	var scroll := Party.has_resurrection_scroll(party)
 	for ch in fallen:
 		col.add_child(_dim("%s lies dead." % ch.cname))
 		if caster != "":
 			var b := Button.new()
-			b.text = "Revivify  %s   (%s casts, −%d ◉)" % [ch.cname, caster, Party.REVIVE_COST]
-			b.disabled = not Party.can_resurrect(party)
+			b.text = "Revivify  %s   (%s casts, −%d ◉)" % [ch.cname, caster, Party.revive_cost(ch)]
+			b.disabled = not Party.can_resurrect(party, ch.id)
 			b.pressed.connect(func(): run.resurrect(ch.id, "spell", caster); _refresh())
 			col.add_child(b)
 		if scroll:
 			var b2 := Button.new()
-			b2.text = "Read the Scroll of Resurrection over %s   (−%d ◉)" % [ch.cname, Party.REVIVE_COST]
-			b2.disabled = not Party.can_resurrect(party)
+			b2.text = "Read the Scroll of Resurrection over %s   (−%d ◉)" % [ch.cname, Party.revive_cost(ch)]
+			b2.disabled = not Party.can_resurrect(party, ch.id)
 			b2.pressed.connect(func(): run.resurrect(ch.id, "scroll"); _refresh())
 			col.add_child(b2)
 		if caster == "" and not scroll:

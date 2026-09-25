@@ -48,7 +48,13 @@ var world_now := 0.0        # world-minutes, stamped by world.gd each frame; pot
 var scouted_next := false   # Potion of Clairvoyance / Clairvoyance cast: the next fight starts scouted
 var blessed := false        # a shrine's blessing: temp HP for every hero at the next fight (core/landmarks.gd)
 var swift_until := 0.0      # Fly / Longstrider: forced-march speed, no road penalty, until this world-minute
-var safe_camp := false      # Rope Trick (or a landmark's shelter): the next camp needs no kit
+var safe_camp := false      # Rope Trick: the next camp needs no kit (the ambush roll stands)
+# A hermit's safe hollow (core/landmarks.gd, the hut's "Ask about the road"):
+# the next camp needs no kit AND is not jumped — the hermit knows a place
+# nothing finds. Its own flag since 2026-09-25: it shared Rope Trick's, so
+# the audit's rule that Rope Trick keeps the ambush roll took the hollow's
+# one promise away with it. Spent by WorldCamp.make_camp().
+var hollow_camp := false
 var alarm_set := false      # Alarm: the next camp's ambush is heard coming
 # Audit 1.6: the slots Rope Trick and Alarm were cast from, [{id, level,
 # spell}], held spent through every long rest until the camp they pay for is
@@ -76,6 +82,20 @@ var lodge: Dictionary = {}
 # pools too), plus which chairs were taken today. Owned entirely by
 # core/recruits.gd.
 var hiring: Dictionary = {}
+# The company is finished (core/defeat.gd): the whole roster died after a
+# defeat. {} for a run still going; otherwise Defeat.ending()'s record — who
+# fell, days lasted, the renown title, the roll. Saved at the top of the world
+# save as "finished" (core/world_save.gd), which is what stops the title
+# screen resuming the slot. An old save has none, so it is not finished.
+var finished: Dictionary = {}
+# The roll of the fallen — every merc this company has lost, oldest first:
+# [{id, name, level, class, species, where, by, day, at, told}]. Owned entirely
+# by core/fallen.gd (the design audit §2.1); [] for a save from before it.
+var fallen: Array = []
+# How long each benched merc has sat out — id -> {"since": world-minute,
+# "warned": bool}. Owned entirely by core/bench.gd, which keeps it lazily off
+# `active`; {} for a save from before the bench counted.
+var bench_clock: Dictionary = {}
 
 # --- roster ---------------------------------------------------------------
 
@@ -314,13 +334,28 @@ func use_identification_scroll(item_id: String) -> bool:
 	return true
 
 # --- death & resurrection -------------------------------------------------
-# 300 gp either way (Revivify's diamond, abstracted to coin — no material item).
-# Statics taking the party, so a scene can ask "can I?" without holding a member.
+# REVIVE_PER_LEVEL x the hero's level, whichever way it is done: a healer's
+# raise, Revivify or a scroll (the diamond, abstracted to coin — no material
+# item). Statics taking the party, so a scene can ask "can I?" without holding
+# a member.
+#
+# It was a flat 300 ◉, which is ~16 level-3 fights of coin and ~3 at level 15
+# (easy open-country purses, Campaign.SELL_RATE's table): death was dearest to
+# undo early, when it is most common, and nearly free late, when gold had
+# nothing else to buy — and below level 6 a fresh hire at the inn came cheaper
+# than raising the veteran (the design audit §5.2). The owner's call: about 50
+# ◉ a level. ESTIMATED, from those purses: a raise is ~7 fights' coin at level
+# 1 (50 ◉), ~8 at 3 (150), ~7 at 6 (300, RAW's diamond), ~8 at 10 (500), ~8 at
+# 15 (750) and ~8 at 19 (950) — the same weight all the way to the end.
 
 const REVIVE_SPELL := "revivify"
 const REVIVE_SCROLL := "scroll-of-resurrection"
-const REVIVE_COST := 300
+const REVIVE_PER_LEVEL := 50
 const REVIVE_SLOT := 3        # Revivify is 3rd level: any free slot of 3+ pays for it
+
+# What raising this hero costs. `ch` is a Character (or anything with level()).
+static func revive_cost(ch) -> int:
+	return REVIVE_PER_LEVEL * maxi(1, int(ch.level())) if ch != null else REVIVE_PER_LEVEL
 
 # The first active member who knows any of `spell_ids`, or null. The road's
 # "a spell you know changes the roll" hook (Revivify's pattern): Pass Without
@@ -369,15 +404,23 @@ static func resurrection_caster(party) -> String:
 static func has_resurrection_scroll(party) -> bool:
 	return party.stash_count(REVIVE_SCROLL) > 0
 
-static func can_resurrect(party) -> bool:
-	return party.gold >= REVIVE_COST \
+# `dead_id` names who; without it, whether the cheapest of the dead could be
+# raised (the linear run's screen asks before it has picked a row).
+static func can_resurrect(party, dead_id := "") -> bool:
+	var cost := -1
+	for ch in party.roster:
+		if ch.dead and (dead_id == "" or ch.id == dead_id):
+			cost = revive_cost(ch) if cost < 0 else mini(cost, revive_cost(ch))
+	if cost < 0:
+		cost = REVIVE_PER_LEVEL
+	return party.gold >= cost \
 		and (resurrection_caster(party) != "" or has_resurrection_scroll(party))
 
 # method: "spell" (spends caster_id's slot) or "scroll" (consumes the stash item).
 # Refuses and changes nothing unless the whole cost is payable.
 static func resurrect(party, dead_id: String, method: String, caster_id: String = "") -> bool:
 	var target = party.get_member(dead_id)
-	if target == null or not target.dead or party.gold < REVIVE_COST:
+	if target == null or not target.dead or party.gold < revive_cost(target):
 		return false
 	var caster = null
 	var slot := 0
@@ -394,7 +437,7 @@ static func resurrect(party, dead_id: String, method: String, caster_id: String 
 	else:
 		return false
 
-	party.spend_gold(REVIVE_COST)
+	party.spend_gold(revive_cost(target))
 	if method == "spell":
 		while caster.slots_used.size() < slot:
 			caster.slots_used.append(0)
@@ -425,8 +468,8 @@ static func auto_revive_all(party) -> void:
 # A lost fight in the open world (scenes/world/world.gd's _retreat, the pit's
 # lost bout): the DOWNED come to, the DEAD stay dead. A dead hero is the price
 # of the loss and comes back only the paid way — a healer's raise
-# (core/settlement_visit.gd) or Revivify/a scroll (resurrect(), above), 300 ◉
-# either way. Until 2026-09-24 this stood up every dead member of the roster,
+# (core/settlement_visit.gd) or Revivify/a scroll (resurrect(), above), at
+# revive_cost() either way. Until 2026-09-24 this stood up every dead member of the roster,
 # benched ones included, so conceding a fight was the cheapest resurrection in
 # the game (the design audit, docs/audit-game-design.md §1.2).
 #
@@ -439,24 +482,18 @@ static func auto_revive_all(party) -> void:
 # living bench marches in their place (roster order, up to MAX_ACTIVE), so
 # the next fight has somebody in it.
 #
-# And if the WHOLE roster is dead, the company is finished — but the open world
-# has no run-ending screen to send it to (the linear run's Campaign.TERMINAL /
-# show_summary is the node route's alone), and a map with nobody alive on it is
-# a save that cannot be played or ended. So exactly one comes back: the
-# highest level of the fallen (roster order breaks ties, so the founder when it
-# is close), at 1 HP, marching alone. `spared` names them so the screen can say
-# it; everyone else stays dead.
-# ponytail: a lone survivor stands in for a game-over the open world does not
-# have. Revisit when the open world gets its own end-of-run summary (a wiped
-# company would end there, and its heroes go to the barracks as they are).
+# And if the WHOLE roster is dead, the company is finished (the owner's call,
+# 2026-09-25): nobody is stood up, `finished` says so, and the caller ends the
+# run (core/defeat.gd; scenes/world/world.gd's _end_company). Until then the
+# open world had no end screen, so the highest-level hero came to alone.
 #
 # `carried_out` is ids a fight put on the ground without killing them, dead
 # flag or not: the pit's lost bout (Downtime.pit_result), which is a brawl for
 # a purse, not a death match. They come to with the downed; nobody else's
 # death is undone by it.
 #
-# Returns {"came_to": [ids], "dead": [ids], "spared": id or ""}. Deterministic:
-# no roll, only the roster's own order and levels.
+# Returns {"came_to": [ids], "dead": [ids], "finished": bool}. Deterministic:
+# no roll, only the roster's own order.
 static func revive_downed(party, carried_out: Array = []) -> Dictionary:
 	var came_to: Array[String] = []
 	var dead: Array[String] = []
@@ -470,17 +507,7 @@ static func revive_downed(party, carried_out: Array = []) -> Dictionary:
 			ch.hp_current = 1
 			ch.dirty()
 			came_to.append(String(ch.id))
-	var spared := ""
-	if not party.roster.is_empty() and dead.size() == party.roster.size():
-		var best = party.roster[0]
-		for ch in party.roster:
-			if ch.level() > best.level():
-				best = ch
-		best.dead = false
-		best.hp_current = 1
-		best.dirty()
-		spared = String(best.id)
-		dead.erase(spared)
+	var finished: bool = not party.roster.is_empty() and dead.size() == party.roster.size()
 	var standing := false
 	for id in party.active:
 		var ch = party.get_member(id)
@@ -492,28 +519,30 @@ static func revive_downed(party, carried_out: Array = []) -> Dictionary:
 		for ch in party.roster:
 			if not ch.dead and not party.is_active(ch.id):
 				party.activate(ch.id)
-	return {"came_to": came_to, "dead": dead, "spared": spared}
+	return {"came_to": came_to, "dead": dead, "finished": finished}
 
 # The line a beaten company reads on the map, from revive_downed()'s answer
 # and the ids this fight killed. Here rather than in the screen so the words
 # and the rule are tested together: the dead are named, and the line says
-# what brings them back.
-func defeat_line(revived: Dictionary, fell: Array, where: String, lost: int) -> String:
-	var spared := String(revived.get("spared", ""))
-	if spared != "":
-		var ch = get_member(spared)
-		return "The company is beaten, and this time nearly all of it stays where it fell. %s comes to alone at %s, %d ◉ lighter. The rest come back only through a healer, at %d ◉ a head." % [
-			ch.cname if ch != null else spared, where, lost, REVIVE_COST]
-	var line := "The company is beaten and left for dead. The living come to at %s, %d ◉ lighter." % [where, lost]
+# what brings them back. `days` is how long they lay there first
+# (core/defeat.gd's DAYS_LOST; 0 for a caller that spends no time).
+func defeat_line(revived: Dictionary, fell: Array, where: String, lost: int, days := 0) -> String:
+	if bool(revived.get("finished", false)):
+		return "The company is beaten, and nobody gets up."
+	var later := "" if days <= 0 else (" a day later" if days == 1 else " %d days later" % days)
+	var line := "The company is beaten and left for dead. The living come to at %s%s, %d ◉ lighter." % [where, later, lost]
 	var names: Array = []
+	var cost := 0
 	for id in fell:
 		var ch = get_member(String(id))
 		if ch != null and ch.dead:
 			names.append(ch.cname)
+			cost += revive_cost(ch)
 	if not names.is_empty():
 		var who: String = names[0] if names.size() == 1 \
 			else ", ".join(names.slice(0, names.size() - 1)) + " and " + String(names[-1])
-		line += " %s did not get up. A healer can raise the dead, at %d ◉ a head." % [who, REVIVE_COST]
+		line += " %s did not get up. A healer can raise %s for %d ◉." % [who,
+			"them" if names.size() > 1 else "the dead", cost]
 	return line
 
 # --- display --------------------------------------------------------------

@@ -262,6 +262,12 @@ func test_rescue_and_failed_delivery() -> void:
 	check(Quest.get_quest(p, "deliver:a:b").is_empty(), "...and it is gone from the log, so the board can post it again")
 	check(Quest.get_quest(p, "look-out-2")["state"] == "active", "the scouting job is untouched")
 	check(Quest.fail_deliveries(p) == [], "nothing to fail twice")
+	# The Far Deeps were split (2026-09-25): a job sent to "deeps" — posted before
+	# the split, or by a pack — is done out in the Unmapped too, their outer half.
+	Quest.record_region_reached(p, "frontier")
+	check(Quest.get_quest(p, "look-out-2")["state"] == "active", "the frontier is not the deeps")
+	Quest.record_region_reached(p, "unmapped")
+	check(Quest.get_quest(p, "look-out-2")["state"] == "complete", "the Unmapped are the Far Deeps: the job is done")
 
 # the ladder: Known passes a neighbour's job at neutral opinion; turn-in is a deed
 func test_the_ladder() -> void:

@@ -300,7 +300,7 @@ func _process(_dt: float) -> void:
 		var n: Node3D = _figs.get(c.id)
 		if n == null:
 			continue
-		n.visible = not c.is_dead()
+		n.visible = not c.is_dead() and not c.has("withdrawn")   # off the field is gone (the audit's 3.5)
 		var p: Vector2 = board._tok.get(c.id, board._pix(c.pos)) + board._lunge(c.id)
 		# #156: the token's screen position already carries its hex's rise, and
 		# world_for_screen reads every pixel as a point on the ground — so the

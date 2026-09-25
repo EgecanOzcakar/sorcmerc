@@ -178,8 +178,8 @@ const CARDS := {
 			"reward": "hermit", "snare": "hour"},
 		{"id": "road", "label": "Ask about the road", "skills": ["insight"], "dc": 12,
 			"note": "They know which hollows are safe.",
-			"win": "A dry hollow to camp in tonight: no camp kit needed.", "lose": "Nothing they will say.",
-			"reward": "safe_camp", "snare": "none"},
+			"win": "A dry hollow to camp in tonight: no camp kit needed, and nothing will find it.", "lose": "Nothing they will say.",
+			"reward": "hollow_camp", "snare": "none"},
 		{"id": "kin", "label": "Talk as one who knows the wild", "skills": [], "dc": 0,
 			"gate": {"backgrounds": ["hermit", "guide"], "classes": ["ranger"]},
 			"note": "%s and the hermit have the same mud on their boots.",
@@ -349,7 +349,7 @@ static func toll(ch, pct: float) -> int:
 # already had a sound elsewhere in the game (a camp kit is a pickup, a night
 # in the ring is a rest, a fight scouted is a thing identified) reuse it.
 const DOOR_SFX := {"cache": "cache_open", "blessing": "blessing", "offering": "offering",
-	"scouted": "identify", "road": "rest", "safe_camp": "rest", "camp_kit": "pickup",
+	"scouted": "identify", "road": "rest", "hollow_camp": "rest", "camp_kit": "pickup",
 	"lead": "lead_marked", "hermit": "lead_marked", "reveal": "map_reveal", "marked": "map_reveal"}
 
 static func _open(reward: String, l, party, world, rng, e: Dictionary) -> void:
@@ -381,8 +381,8 @@ static func _open(reward: String, l, party, world, rng, e: Dictionary) -> void:
 		"road":
 			world.clock.elapsed = maxf(0.0, world.clock.elapsed - Travel.TIME_SAVED)   # floors at zero, like Travel's own refund
 			e["minutes"] = -Travel.TIME_SAVED
-		"safe_camp":
-			party.safe_camp = true
+		"hollow_camp":
+			party.hollow_camp = true   # its own flag, not Rope Trick's: no kit AND no ambush roll
 		"camp_kit":
 			party.stash_add("camp-kit")
 			e["item_name"] = Campaign.item_name("camp-kit")

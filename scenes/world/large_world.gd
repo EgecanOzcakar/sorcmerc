@@ -11,6 +11,7 @@ const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 const Landmarks = preload("res://core/landmarks.gd")
 const WorldBands = preload("res://core/world_bands.gd")
+const WorldHomes = preload("res://core/world_homes.gd")
 
 static func build() -> World:
 	var w := World.new()
@@ -80,8 +81,12 @@ static func build() -> World:
 	w.add_lair(World.Lair.new("goblin-warren", Vector2(700, 300), "goblinoid"))
 	w.add_lair(World.Lair.new("giant-hold", Vector2(-1300, -650), "giant"))
 	w.add_lair(World.Lair.new("sunken-ruins", Vector2(-700, -850), "undead", "Sunken Ruins"))
-	w.add_lair(World.Lair.new("zombie-graveyard", Vector2(750, 1550), "undead", "Zombie Graveyard"))
+	# 2026-09-25: was (750, 1550), frac 0.87 — just past the frontier's seam, the same
+	# misfiling the small map's graveyard had (core/world_homes.gd). Frac 0.84 now,
+	# still in the drowned ground below.
+	w.add_lair(World.Lair.new("zombie-graveyard", Vector2(720, 1490), "undead", "Zombie Graveyard"))
 	w.add_lair(World.Lair.new("dragon-cave", Vector2(1700, -1000), "dragon", "Dragon's Cave"))
 	Landmarks.place(w, 43)   # a fixed seed: the large map is hand-placed, and so are its landmarks
+	WorldHomes.fill(w, 43)   # a lair for every people, after the landmarks (core/world_homes.gd)
 	WorldBands.seed(w, 43)   # #163: fill the roads to the cap, around the bands above
 	return w

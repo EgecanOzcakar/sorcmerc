@@ -291,10 +291,13 @@ const BARK_SFX := {"hit": "hit", "crit": "crit", "kill": "kill", "down": "down",
 	"low_hp": "", "victory": "victory"}
 
 # Fire a bark for `c` on `trigger` ("hit" | "crit" | "kill" | "low_hp" | "down" |
-# "victory"). Cosmetic: never gates, never touches the combat RNG, never fails loudly.
+# "victory" | "partner_down"). Cosmetic: never gates, never touches the combat RNG,
+# never fails loudly.
 # T9z: `sfx` overrides the trigger's default sting — resolve_attack passes the
 # attacker's weapon-specific hit so a bow and a mace stop sounding identical.
-func bark(c, trigger: String, sfx := "") -> void:
+# `ally` is the name a partner_down line says (core/barks.gd): the first name of
+# the Combatant who just went down, so it is always someone really here.
+func bark(c, trigger: String, sfx := "", ally := "") -> void:
 	var sound: String = sfx if sfx != "" else BARK_SFX.get(trigger, "")
 	if sound != "":
 		Sound.play_sfx(sound)   # before the returns below: sound plays even in a fast run
@@ -303,7 +306,9 @@ func bark(c, trigger: String, sfx := "") -> void:
 	var faction := ""
 	if c.team != "party" and c.src_id != "":
 		faction = String(Catalog.monster(c.src_id).get("faction", ""))
-	var text := Barks.line(_bark_rng, c.team, faction, trigger)
+	# The audit's §2.3: a hero speaks in their temperament's voice.
+	var temper: String = Barks.temperament(c.traits) if c.team == "party" else ""
+	var text := Barks.line(_bark_rng, c.team, faction, trigger, temper, ally)
 	if text == "":
 		return
 	# T31: a line never fires silently — pair it with this speaker's gibberish stinger.
@@ -778,7 +783,7 @@ func end_turn() -> void:
 			round_num += 1
 			_objective_round()
 		var c = current()
-		if c.is_dead() or c.is_stable():
+		if c.is_dead() or c.is_stable() or c.has("withdrawn"):
 			continue
 		return
 
@@ -821,7 +826,115 @@ func surrender() -> void:
 	log.append("The company lays down its arms.")
 
 func is_over() -> bool:
-	return surrendered or round_num > MAX_ROUNDS or _team_out("party") or _team_out("foe") or _objective_over()
+	return surrendered or withdrew or round_num > MAX_ROUNDS or _team_out("party") or _team_out("foe") or _objective_over()
+
+# --- withdrawing off the board's edge (the design audit §3.5) ----------------
+#
+# The only way out of a fight used to be surrender, which is a defeat in full.
+# Now a hero standing on an edge hex of the board can spend their action to
+# walk off it ("Leave the field", a BASIC verb). They are out of the fight:
+# `withdrawn` in their statuses, off the board (NOWHERE), not conscious (so
+# nothing targets them, nothing counts them, and end_turn() skips them) —
+# but alive, at the HP they walked off with, which write_back carries home.
+# Walking off from beside a foe provokes it, as walking away always does,
+# unless the hero Disengaged first; a hero who goes down to that swing does not
+# leave (the action is spent). Grappled or restrained, nobody walks anywhere.
+#
+# Heroes left behind fight on. When the LAST conscious hero walks off, the
+# fight ends as a WITHDRAWAL (`withdrew`, outcome() WITHDRAWN): not a win — no
+# XP, no loot, no quest progress (Encounter.resolve_outcome pays nothing) —
+# and not a defeat — no defeat costs (scenes/world/world.gd). Anyone left
+# lying on the field then is dead: with nobody left standing to engage, the
+# mercy rule (core/ai.gd's MERCY) has nothing left to hold the foes back.
+# If instead the heroes left behind are all beaten, it is a defeat as ever.
+#
+# Only where the fight allows it: can_withdraw, which Encounter.build reads off
+# the spec's `withdraw` key — the open world's road fights set it (world.gd's
+# _launch_combat). A site's room has its own way out between rooms, the pit is
+# a bout for a purse, a breakout's way off IS its objective, and the linear
+# campaign and the sandbox never ask. Both co-op peers build from the same
+# spec, so both agree; `withdrew` is outside statuses, so Coop.state_hash
+# carries it.
+const WITHDRAWN := "Withdrawn"
+var can_withdraw := false
+var withdrew := false
+var _edges: Array = []   # edge_hexes(), worked out once: the board's hexes do not move
+
+func is_hero(c) -> bool:
+	return c.team == "party" and c.sheet != null and not c.has("bystander") \
+		and not c.has("summoned") and not c.has("illusion")
+
+# Every open hex with a neighbour off the board: the ground a hero can walk off
+# from. Sorted, so both co-op peers hold the same list.
+func edge_hexes() -> Array:
+	if _edges.is_empty() and board.has("hexes"):
+		var on := {}
+		for h in board["hexes"]:
+			on[h] = true
+		var blocked: Array = board.get("objects", []).filter(
+			func(o): return o.get("blocks_movement", false)).map(func(o): return o["pos"])
+		for h in board["hexes"]:
+			if h in blocked:
+				continue
+			for n in Hex.neighbors(h):
+				if not on.has(n):
+					_edges.append(h)
+					break
+		_edges.sort()
+	return _edges
+
+func on_edge(p: Vector2i) -> bool:
+	return p in edge_hexes()
+
+# Why `c` cannot leave the field right now, "" when they can. The one rule the
+# button, perform() and the UI's hint all read.
+func leave_refusal(c) -> String:
+	if not can_withdraw or not is_hero(c):
+		return "there is no leaving this fight"
+	if not c.conscious():
+		return "nobody carries them off"
+	if not on_edge(c.pos):
+		return "not at the edge of the field"
+	if c.has("grappled") or c.has("restrained"):
+		return "held fast"
+	return ""
+
+func _leave_field(c) -> Dictionary:
+	if not c.has("disengaged") and not c.has("hidden"):
+		for f in enemies_of(c):
+			if not f.conscious() or not can_spend(f, "reaction") or _buff_flag(f, "no_attack"):
+				continue
+			if Hex.distance(f.pos, c.pos) <= f.reach:
+				_spend(f, "reaction")
+				resolve_attack(f, c, {"opportunity": true})
+				if not c.conscious():
+					return {"left": false}   # cut down at the edge: they do not get away
+	if c.has("concentrating"):
+		_end_concentration(c, "lets go of %s on the way out" % Effects.humanize(String(c.statuses["concentrating"]["spell"])))
+	for k in ["dodging", "hidden", "helped", "disengaged"]:
+		c.statuses.erase(k)
+	c.statuses["withdrawn"] = true
+	c.pos = NOWHERE
+	_release_grapples()
+	log.append("%s leaves the field." % c.cname)
+	if heroes().is_empty():
+		withdrew = true
+		var left: Array = []
+		for o in combatants:
+			if is_hero(o) and not o.has("withdrawn") and not o.is_dead():
+				_kill(o)
+				left.append(o.cname)
+		log.append(withdrawal_line(left))
+	return {"left": true}
+
+# What the company's withdrawal says, in the log and on the map: who, if
+# anyone, was left lying on the field.
+static func withdrawal_line(left_behind: Array) -> String:
+	if left_behind.is_empty():
+		return "The company leaves the field. Nothing is won, and nothing more is lost."
+	var who: String = String(left_behind[0]) if left_behind.size() == 1 \
+		else ", ".join(left_behind.slice(0, left_behind.size() - 1)) + " and " + String(left_behind[-1])
+	return "The company leaves the field. %s %s left where they fell." % [who, "is" if left_behind.size() == 1 else "are"]
 
 # An illusion is not a creature, so it cannot be the last one standing. Without
 # this, Invoke Duplicity's double kept a wiped party's fight "ongoing" until
@@ -833,6 +946,8 @@ func _team_out(team: String) -> bool:
 	return true
 
 func outcome() -> String:
+	if withdrew:
+		return WITHDRAWN   # first: the fight ended when the last one walked off
 	if _team_out("foe"):
 		return "Victory"
 	if surrendered or _team_out("party"):
@@ -1028,6 +1143,10 @@ const BASIC := [
 	{"id": "dash", "label": "Dash", "kind": "dash", "cost": "action", "targeting": "self"},
 	{"id": "disengage", "label": "Disengage", "kind": "disengage", "cost": "action", "targeting": "self"},
 	{"id": "hide", "label": "Hide", "kind": "hide", "cost": "action", "targeting": "self"},
+	# The design audit §3.5: off the board's edge. Only a hero, only where the
+	# fight allows it (can_withdraw), only from an edge hex — see leave_refusal().
+	{"id": "leave_field", "label": "Leave the field", "kind": "withdraw", "cost": "action", "targeting": "self",
+		"text": "Walk off the board's edge and out of the fight. If everyone standing leaves, the fight ends: nothing won, nothing lost but the ones left lying here."},
 ]
 
 # Feature kinds that are a button. The rest are passive: passive_damage folds into
@@ -1174,6 +1293,8 @@ func _spend(actor, cost: String) -> bool:
 func is_button(actor, v: Dictionary) -> bool:
 	if v.get("cost", "") == "reaction":
 		return false   # a reaction is never a button — fire_reactions() casts it
+	if v.get("kind", "") == "withdraw":
+		return can_withdraw and is_hero(actor)
 	if v.get("trigger", "") in NON_BUTTON_TRIGGERS or v.get("trigger", "") == "on_weapon_hit":
 		return false   # fires from resolve_attack / begin_turn, never a button (Stunning Strike too)
 	return true
@@ -1208,6 +1329,7 @@ func _offerable(actor, v: Dictionary) -> bool:
 			and _free_near(actor.pos) != NOWHERE
 		"attack_modifier", "grant_action": return true
 		"escape": return _grappler_of(actor) != null
+		"withdraw": return leave_refusal(actor) == ""
 		"font_of_magic": return _font_ok(actor, v)
 		"metamagic": return not actor.has(METAMAGIC)
 	match v.get("targeting", "self"):
@@ -1308,6 +1430,11 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 		return {"error": "nothing to shove them into"}
 	if kind in ["shove", "grapple"] and target != null and _size_rank(target.size) > _size_rank(actor.size) + 1:
 		return {"error": "too big to %s" % kind}
+	# Leaving the field: refused before the action is paid, like every refusal.
+	if kind == "withdraw":
+		var why_not := leave_refusal(actor)
+		if why_not != "":
+			return {"error": why_not}
 	# A cast the resolver would refuse is refused HERE, before a thing is spent.
 	# cast() makes the same checks, but only after this function has already
 	# paid the action (and, for a teleport or a summon, the slot) — so a refused
@@ -1378,6 +1505,7 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 		"disengage":
 			actor.statuses["disengaged"] = true
 			log.append("%s disengages." % actor.cname)
+		"withdraw": return _leave_field(actor)
 		"heal_self", "heal_ally":
 			var who = actor if kind == "heal_self" else target
 			var n := int(v.get("dice_count", 1))
@@ -3073,9 +3201,15 @@ func _take_damage(target, dmg: int, dtype := "", crit := false) -> void:
 			_release_grapples()
 		if _member(target):
 			var rallied: Array = PartyOpinion.rally(party, target, self)
+			var said := false
 			for ally in allies_of(target):
 				if ally.id in rallied:
 					log.append("%s rallies — %s is down." % [ally.cname, target.cname])
+					# The first of them to rally says so, by name (core/barks.gd's
+					# partner_down); one voice, not a chorus.
+					if not said:
+						bark(ally, "partner_down", "", String(target.cname).get_slice(" ", 0))
+						said = true
 
 # Temporary hit points never stack: the higher of the two stays (RAW).
 func grant_temp_hp(c, n: int) -> void:

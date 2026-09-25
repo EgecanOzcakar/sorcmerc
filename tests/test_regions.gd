@@ -46,8 +46,9 @@ func _init() -> void:
 	check(Regions.band_of(w, Vector2(100, 0)) == "heartland", "home is the heartland")
 	check(Regions.band_of(w, Vector2(600, 0)) == "marches", "a few hours out is the marches")
 	check(Regions.band_of(w, Vector2(800, 0)) == "frontier", "past that is the frontier")
-	check(Regions.band_of(w, Vector2(980, 0)) == "deeps", "the far edge is the deeps")
-	check(Regions.band_of(w, Vector2(9999, 0)) == "deeps", "and so is anything past the edge")
+	check(Regions.band_of(w, Vector2(900, 0)) == "deeps", "past the last waystone, the deeps")
+	check(Regions.band_of(w, Vector2(980, 0)) == "unmapped", "the far edge is the Unmapped")
+	check(Regions.band_of(w, Vector2(9999, 0)) == "unmapped", "and so is anything past the edge")
 	check(Regions.band_of(w, Vector2(0, -600)) == "marches", "the rings are rings, not a corridor")
 
 	# The anchor does not follow the party — a map whose far away moves with you
@@ -69,12 +70,53 @@ func _init() -> void:
 	# old 0.30/0.60/0.85 the heartland was 9% of the map and its three neighbours
 	# 27/36/28%, which is how the band built for levels 1-3 ended up a bubble with
 	# nothing but the starting town in it.
-	var prev_area := 0.0
+	# Four COUNTRIES, a quarter each; the Far Deeps' two bands split theirs in half
+	# (the equal-area point of the old ring, 2026-09-25).
+	for c in Regions.countries():
+		var f: Array = Regions.country_fracs(c)
+		var share: float = float(f[1]) * float(f[1]) - float(f[0]) * float(f[0])
+		check(absf(share - 0.25) < 0.03, "%s is a quarter of the map (%.0f%%)" % [c, share * 100.0])
+	for id in ["deeps", "unmapped"]:
+		var f: Array = Regions.ring_fracs(id)
+		var share: float = float(f[1]) * float(f[1]) - float(f[0]) * float(f[0])
+		check(absf(share - 0.125) < 0.02, "%s is half of the Far Deeps (%.1f%% of the map)" % [id, share * 100.0])
+
+	# --- the Far Deeps, split (the design audit §5.4, 2026-09-25) -------------
+	# Added, not renamed: every band id a pack could have written still exists
+	# and still means what it meant, and "deeps" still names the whole country
+	# wherever something asks a yes-or-no question of it.
+	var ids: Array = Regions.BANDS.map(func(b): return String(b["id"]))
+	for old in ["heartland", "marches", "frontier", "deeps"]:
+		check(ids.has(old), "%s is still a band" % old)
+	check(Regions.countries() == ["heartland", "marches", "frontier", "deeps"], "still four countries (%s)" % str(Regions.countries()))
+	check(Regions.band_by_id("deeps")["levels"] == [10, 14], "the inner Deeps are levels 10-14")
+	check(Regions.band_by_id("unmapped")["levels"] == [15, 20], "the Unmapped are levels 15-20")
+	check(Regions.country_of("unmapped") == "deeps" and Regions.country_of("frontier") == "frontier"
+		and Regions.country_of("nowhere") == "nowhere", "a band's country is its part_of, or itself")
+	check(Regions.within(w, Vector2(980, 0), "deeps") and Regions.within(w, Vector2(900, 0), "deeps"),
+		"\"deeps\" holds in both halves")
+	check(not Regions.within(w, Vector2(900, 0), "unmapped"), "...and \"unmapped\" only in its own")
+	check(not Regions.within(w, Vector2(800, 0), "deeps"), "...and neither on the frontier")
+	var far_ring: Array = Regions.country_ring(w, "deeps")
+	check(is_equal_approx(float(far_ring[1]), 1000.0) and absf(float(far_ring[0]) - 870.0) < 1.0,
+		"the Far Deeps as a country run from the frontier to the edge (%s)" % str(far_ring))
+	var inner: Array = Regions.ring(w, "deeps")
+	check(Regions.band_of(w, Vector2((float(inner[0]) + float(inner[1])) * 0.5, 0)) == "deeps",
+		"placing into the deeps' own ring lands in the deeps")
+	var edge: Dictionary = Regions.at(w, Vector2(980, 0))
+	var deeps_here: Dictionary = Regions.at(w, Vector2(900, 0))
+	check(Regions.crossing_text(deeps_here, edge).find("the Unmapped — levels 15-20") >= 0,
+		"the crossing card names the new band (%s)" % Regions.crossing_text(deeps_here, edge))
+	check(String(edge["blurb"]) != "" and String(edge["blurb"]).find("'") < 0, "...with a blurb, in the authored register")
+	# Every point still maps to a band — a save's position from before the split
+	# included — and the bands still tile the map with no gap.
+	for x in [0, 499, 500, 709, 711, 869, 871, 939, 941, 1000, 5000]:
+		check(ids.has(Regions.band_of(w, Vector2(x, 0))), "a point %d out is in some band" % x)
+	var prev_hi := 0.0
 	for b in Regions.BANDS:
-		var hi: float = minf(float(b["upto"]), 1.0)
-		var share: float = hi * hi - prev_area
-		check(absf(share - 0.25) < 0.03, "%s is a quarter of the map (%.0f%%)" % [b["id"], share * 100.0])
-		prev_area = hi * hi
+		var f: Array = Regions.ring_fracs(String(b["id"]))
+		check(is_equal_approx(float(f[0]), prev_hi), "%s starts where the last band stopped" % b["id"])
+		prev_hi = float(f[1])
 
 	# Every real map the game ships bands into more than one country, or the
 	# feature does nothing where it actually has to work — AND its near ring holds
@@ -98,8 +140,16 @@ func _init() -> void:
 	# free: every win rate core/scaler.gd measured was measured at x1.00.
 	check(Regions.power_scale(w, Vector2(600, 0), p3) == 1.0,
 		"a level 3 party in the marches gets the fight scaler already measured")
-	check(Regions.power_scale(w, Vector2(980, 0), p10) == 1.0,
+	check(Regions.power_scale(w, Vector2(900, 0), p10) == 1.0,
 		"...and so does a level 10 party in the deeps")
+	# The Unmapped start at 15: a level 10 party at the far edge is one band out,
+	# and a level 15 one has outgrown the inner Deeps.
+	check(Regions.power_scale(w, Vector2(980, 0), p10) > 1.0,
+		"a level 10 party in the Unmapped is out of its depth (x%.2f)" % Regions.power_scale(w, Vector2(980, 0), p10))
+	check(Regions.level_here(w, Vector2(980, 0), p10) == 15, "...which builds for level 15")
+	var p15 := _party_at(15)
+	check(Regions.power_scale(w, Vector2(980, 0), p15) == 1.0, "a level 15 party is at home at the edge")
+	check(Regions.level_here(w, Vector2(900, 0), p15) == 14, "...and has outgrown the inner Deeps")
 	# The frontier stops at 9: level 10 has outgrown it, and belongs to the deeps
 	# alone rather than being in band on both sides of that seam.
 	check(Regions.power_scale(w, Vector2(800, 0), p10) < 1.0,
@@ -145,7 +195,7 @@ func _init() -> void:
 		check(absf(b / ruler3 - 1.0) < 0.01,
 			"%s in the heartland meet its level-3 fight (x%.3f of it)" % [pr[1], b / ruler3])
 	var lone: float = Scaler._budget(ones.party_characters(), "easy",
-		Regions.power_scale(w, Vector2(980, 0), ones))
+		Regions.power_scale(w, Vector2(900, 0), ones))
 	check(absf(lone / deeps10 - 1.0) < 0.01,
 		"a lone level 1 in the deeps meets its level-10 fight, not a share of it (x%.3f)" % [lone / deeps10])
 	# The ceiling holds inside the band too. Four level 3s are a level 3 party,
@@ -173,7 +223,8 @@ func _init() -> void:
 
 	# The level a fight is built for is the clamp itself, stated plainly.
 	check(Regions.level_here(w, Vector2(100, 0), p10) == 3, "the heartland builds for level 3")
-	check(Regions.level_here(w, Vector2(980, 0), p3) == 10, "the deeps build for level 10")
+	check(Regions.level_here(w, Vector2(900, 0), p3) == 10, "the deeps build for level 10")
+	check(Regions.level_here(w, Vector2(980, 0), p3) == 15, "...and the Unmapped for level 15")
 	check(Regions.level_here(w, Vector2(600, 0), p3) == 3, "and the marches for whoever is standing in them")
 
 	# --- the ruler ----------------------------------------------------------

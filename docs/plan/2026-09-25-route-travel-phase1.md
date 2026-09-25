@@ -35,7 +35,8 @@ it always did.
   to the Nine Sisters"). A lair's track, or a hut's or tower's path, is found
   by the lair button's Survival check made at the fork, one try a day.
 - The road rolls once per 100 units walked (`RouteEncounters.STEP`), seeded on
-  the stretch and the day. A threat is met the way a band closing in always
+  the edge and the road's odometer (saved), so a reload is not a reroll and
+  every stretch walked is a roll of its own. A threat is met the way a band closing in always
   was — the approach card, or the watch's roll in the dark — and a friendly
   meeting gets the friendly card. Win, lose, talk or slip, the band is gone
   when the meeting is; nothing comes back, and no band is seeded or refilled.
@@ -58,18 +59,54 @@ first corner. Nothing gave a route on a dry map before, so it never showed;
 a road does, and it cut every road trip short at its first bend. The
 procedural maps have a lake, so today only a pack's dry map would have hit it.
 
+**A correction to the spike's entry** (`2026-09-25-route-travel-spike.md`, which
+says a roll is "keyed on the edge, the stretch and the world-day"). That key
+made the same stretch walked twice in one day the same stretch: a band beaten
+on the way out was waiting on the way back, and a quiet stretch stayed quiet
+however often it was paced. The first real walks on the roads showed it —
+sixteen trips between three towns in one morning met nobody, because they were
+the same few stretches rolled once. The key is now the edge and the odometer
+(`RouteEncounters.step_key(edge, walked)`); a reload still restores the
+odometer, so it is still not a reroll. And a place an outcome puts on the map
+with no trail named (`WorldRoutes.open_place`) now hangs off the nearest
+*known* road: with a lair for every people on the maps (merged the same day), a
+hidden lair track was often nearer, and the place was put where the company
+could not walk.
+
+**`BASE` re-measured: 0.60 → 0.34.** This branch was merged with master after
+"a lair for every people" and the Unmapped (#257) landed, which changed what
+the calibration was measured against. `tests/sweep_route_travel.gd`, re-run on
+the maps as they now stand (small, large, procedural 1–4; 4 itineraries of
+30 000 units): today's free roam delivers 0.47 hostile contacts per 1000 units
+(340 in 720 113), down from 0.67, and with a lair for every people the mean
+cover × lure along the network rose from 1.12 to 1.38. 0.47 / 1.38 = 0.34, so
+the road still delivers the density free roam does. The sweep itself sized its
+per-ring tables for four rings and hung on the first walk that reached the
+Unmapped; it now reads the ring count off `Regions.BANDS`.
+
+**Ported from master's red CI: a lair's respawn is read off its country.**
+`test_lair_respawn` has been red on master since #255 (respawn by ring: a day
+near home, three on the Frontier, five in the Deeps) and #257 (the Unmapped,
+a band of the Deeps country) landed together: `WorldLairs.respawn_after` keyed
+its table on the band, so a lair in the Unmapped came back after the base one
+day instead of the Deeps' five, and the test's Deeps lair stood in the
+Unmapped. It now reads `Regions.country_of(band)`, and the test checks the
+country.
+
 Screenshots: `docs/shots/route-travel-map.png` (the small map's roads with the
 company on the Greenmarch road) and `docs/shots/route-travel-met.png` (what
 the road sent, on the approach card), from `tests/shot_routes_world.gd`.
 
-Tests: `tests/test_route_travel.gd` (50 checks: adopting, the march, the road
-over a long walk against its rate and deterministic, met bands, the search,
-marks from other doors, a meeting the game was closed on, the lead's trail through Landmarks' own door, the
-camp, the save both ways) and the drive robot `tests/drive_routes.gd` (76
-checks: the real world screen with the flag — no bands, clicks on ground and
-on towns, a trip that passes Riverhold without opening it, sixteen trips'
-worth of road with every card the road opened met and its band gone after,
-the search at a fork, and a map built without the flag still roaming free).
+Tests: `tests/test_route_travel.gd` (adopting, the march, the road over a
+long walk against its rate and deterministic, met bands, the search, marks from
+other doors, a meeting the game was closed on, the lead's trail through
+Landmarks' own door, the camp, the save both ways) and the drive robot
+`tests/drive_routes.gd` (the real world screen with the flag — no bands,
+clicks on ground and on towns, a trip that passes Riverhold without opening
+it, sixteen trips' worth of road with every card the road opened met and its
+band gone after, the search at a fork, and a map built without the flag still
+roaming free). Their check counts move with how many cards the road opens, so
+they are not quoted here.
 
 ### Still open
 

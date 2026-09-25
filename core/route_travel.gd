@@ -128,9 +128,9 @@ static func place_name(world, id: String) -> String:
 #   {"kind": "threat", "spec": {...}}                        RouteEncounters.roll() fired
 #   {"kind": "meet", "spec": {...}}                          RouteEncounters.meet() fired
 # A roll is made for every RouteEncounters.STEP the odometer crosses, keyed on
-# the stretch of road and the day (RouteEncounters.step_key), so the same stretch
-# walked twice in a day is the same stretch and a reload is not a reroll. The
-# threat stream is rolled first; a meeting is only rolled on a quiet stretch.
+# the edge and the odometer (RouteEncounters.step_key): every stretch walked is
+# a roll of its own, and a reload — which restores the odometer — is not a
+# reroll. The threat stream is rolled first; a meeting only on a quiet stretch.
 static func step(world, from: Vector2) -> Array:
 	var out: Array = []
 	var p = world.player()
@@ -149,8 +149,7 @@ static func step(world, from: Vector2) -> Array:
 	if steps <= 0:
 		return out
 	var at: Dictionary = world.routes.locate(p.position, false)
-	var key := RouteEncounters.step_key(String(at.get("edge", "off")), float(at.get("offset", world.route_walked)),
-		world.clock.elapsed)
+	var key := RouteEncounters.step_key(String(at.get("edge", "off")), world.route_walked)
 	var threat := RouteEncounters.roll(world, p.position, key)
 	if not threat.is_empty():
 		out.append({"kind": "threat", "spec": threat})

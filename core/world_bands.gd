@@ -40,6 +40,15 @@ const KINDS := [
 	{"id": "cultist-procession", "faction": "cultist", "ai": "hunt", "weight": 2, "roles": ["spellcaster", "light", "light"]},
 	{"id": "giant", "faction": "giant", "ai": "hunt", "weight": 1, "roles": ["heavy", "heavy"]},
 	{"id": "monstrosity", "faction": "monstrosity", "ai": "hunt", "weight": 1, "roles": ["heavy", "light"]},
+	# The Far Deeps' own peoples (the design audit, docs/audit-game-design.md
+	# §8.4, 2026-09-25). Until these rows the Deeps' only roamers were the
+	# undead, giants and monstrosities they share with the frontier, so fey,
+	# elementals and constructs were met in a lair or nowhere. Weight 2 each:
+	# a kind's weight is its share of the whole map's population, and these
+	# three live on the outer quarter of it only.
+	{"id": "fey-host", "faction": "fey", "ai": "hunt", "weight": 2, "roles": ["light", "light", "spellcaster"]},
+	{"id": "elemental-storm", "faction": "elemental", "ai": "hunt", "weight": 2, "roles": ["heavy", "heavy"]},
+	{"id": "construct-column", "faction": "construct", "ai": "hunt", "weight": 2, "roles": ["heavy", "heavy", "heavy"]},
 	{"id": "dwarf-patrol", "faction": "dwarf", "ai": "patrol", "weight": 2, "roles": ["heavy", "heavy"]},
 	{"id": "elf-patrol", "faction": "elf", "ai": "patrol", "weight": 2, "roles": ["light", "spellcaster"]},
 	{"id": "human-patrol", "faction": "human", "ai": "patrol", "weight": 3, "roles": ["heavy", "heavy", "light"]},
@@ -155,13 +164,16 @@ static func _pick(rng) -> Dictionary:
 # this map cannot hold (a patrol for a race with no town here).
 static func _place(world, rng, kind: Dictionary) -> Dictionary:
 	if kind["ai"] == "hunt":
+		# By country, not by band: the Far Deeps are two bands but one country
+		# (core/regions.gd), and counting both halves would send the Deeps'
+		# kinds out there twice as often as to the frontier they share.
 		var rings: Array = []
-		for b in Regions.BANDS:
-			if Regions.suits(String(b["id"]), String(kind["faction"])):
-				rings.append(String(b["id"]))
+		for c in Regions.countries():
+			if Regions.suits(String(c), String(kind["faction"])):
+				rings.append(String(c))
 		if rings.is_empty():
 			return {}
-		var r: Array = Regions.ring(world, rings[rng.roll_die(rings.size()) - 1])
+		var r: Array = Regions.country_ring(world, rings[rng.roll_die(rings.size()) - 1])
 		# sqrt so the annulus is filled by area, not bunched at the inner seam
 		var d: float = sqrt(lerpf(float(r[0]) ** 2, float(r[1]) ** 2, _frac(rng)))
 		var pos: Vector2 = Regions.anchor(world) + Vector2.RIGHT.rotated(_frac(rng) * TAU) * d

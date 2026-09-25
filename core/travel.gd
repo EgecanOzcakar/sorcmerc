@@ -388,7 +388,8 @@ static func _note_event(id: String) -> void:
 # one — so the table has to decline to roll anything the world it is describing
 # would not hold. Two gates, both cheap enough to run on every tick:
 #
-#   bands  — the country under the party's feet (D6). A world too small to band
+#   bands  — the country under the party's feet (D6), a country holding its
+#            sub-bands (Regions.holds). A world too small to band
 #            reads as the heartland, and a world with no player on it (a test
 #            harness, a save mid-load) drops the gate rather than the event.
 #   needs  — a state of the party or the map. Unknown requirements fail closed:
@@ -401,7 +402,7 @@ static func _table(party, world) -> Array:
 	var out: Array = []
 	for e in EVENTS:
 		var bands: Array = e.get("bands", [])
-		if band != "" and not bands.is_empty() and not band in bands:
+		if band != "" and not bands.is_empty() and not bands.any(func(b): return Regions.holds(band, String(b))):
 			continue
 		if not _needs_met(String(e.get("needs", "")), party, world):
 			continue

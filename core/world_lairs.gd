@@ -20,6 +20,7 @@ const Traits = preload("res://core/traits.gd")   # #176 step 4: Curious and Delv
 const Campaign = preload("res://core/campaign.gd")
 const RNG = preload("res://core/rng.gd")
 const Dice = preload("res://core/dice.gd")
+const Regions = preload("res://core/regions.gd")   # 2026-09-25: the respawn window by band
 
 const DISCOVER_SKILL := "survival"
 const DISCOVER_DC := 13
@@ -156,8 +157,29 @@ static func expire(world, now: float) -> Array:
 #
 # RESPAWN is deliberately the shortest interval that still reads as "time
 # passed" — a day is one long rest, so a party can clear a warren, sleep, and
-# find it occupied again. Raise it if a lair should be scarcer than that.
+# find it occupied again. That is right near home, where the lairs are a
+# company's first work and there are few of them.
+#
+# Past the Marches it is slower (RESPAWN_BY_BAND, 2026-09-25, the design audit
+# §5.4): the Far Deeps hold most of a run's levels, and a one-day respawn made
+# clear, sleep, clear the same hole the obvious loop there. Three days on the
+# Frontier and five in the Deeps mean a company that wants the Deeps' fights
+# has to go and find the next lair instead of camping on the last one. TUNING
+# — taste numbers, not measured: no sweep runs the open world for days. The
+# COUNTRY is read off where the lair stands (core/regions.gd), so a pack's map
+# gets the same rule — the country, not the band: the Unmapped is a band of the
+# Far Deeps (Regions.country_of), and keying on the band gave a lair out there
+# the base one day instead of the Deeps' five.
 const RESPAWN := 1440.0           # one in-game day, in world-minutes
+const RESPAWN_BY_BAND := {"heartland": 1440.0, "marches": 1440.0,
+	"frontier": 4320.0, "deeps": 7200.0}
+
+# How long this lair stays empty once spent. `world` may be null (a caller
+# with no map to hand), which reads as the base day.
+static func respawn_after(world, lair) -> float:
+	if world == null:
+		return RESPAWN
+	return float(RESPAWN_BY_BAND.get(Regions.country_of(Regions.band_of(world, lair.position)), RESPAWN))
 
 # Every stamp of "this lair is spent" goes through here, so the respawn clock
 # cannot be started in one place and forgotten in another.
@@ -173,7 +195,7 @@ static func respawn(world, now: float) -> Array:
 	for l in world.lairs:
 		if not l.looted or l.cleared_at < 0.0:
 			continue          # live already, or spent before this rule existed
-		if now - l.cleared_at < RESPAWN:
+		if now - l.cleared_at < respawn_after(world, l):
 			continue
 		l.looted = false
 		l.cleared_at = -1.0

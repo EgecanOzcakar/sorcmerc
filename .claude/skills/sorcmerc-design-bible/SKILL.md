@@ -32,7 +32,7 @@ The mercenary-company fantasy is carried by flavour and structure, not by a Batt
 - **Long rests are expensive:**
   - at most once per 24 in-game hours;
   - 8 hours of world clock, during which bands keep walking and markets restock (`core/world_rest.gd` steps the night);
-  - an inn room costs gold, and camping needs a 150-gold camp kit (or Rope Trick, whose slot stays spent through that night) and carries an 8% ambush risk; nobody camps with a hostile band in reach;
+  - an inn room costs gold, and camping needs a 150-gold camp kit (or Rope Trick, whose slot stays spent until the camp is made) and carries an 8% ambush risk; a hermit's hollow (a landmark) spares the kit and is never jumped; nobody camps with a hostile band in reach;
   - downtime's nights refill only when the 24-hour gate allows;
   - none at all inside a site.
 - **Spent slots never buy an easier fight.** The encounter budget reads the party's *remaining* slots, so it would send a drained party a smaller, poorer fight. `WorldThreat.slot_hold()` cancels that in the open world, and `core/site.gd` does the same inside sites. Only wounds thin a fight.
@@ -48,7 +48,7 @@ Avoid epic-fantasy capitals-and-prophecy prose, jokes that break the scene, and 
 
 ## Setting
 
-- Four concentric countries, each with a level range: **the Heartland** (levels 1–3), **the Marches** (3–6), **the Frontier** (6–9) and **the Far Deeps** (10–20). Each has home factions (`core/regions.gd` `BANDS`/`HOMES`).
+- Four concentric countries, each with a level range: **the Heartland** (levels 1–3), **the Marches** (3–6), **the Frontier** (6–9) and **the Far Deeps** (10–20). Each has home factions (`core/regions.gd` `BANDS`/`HOMES`). Since 2026-09-25 the Far Deeps are two bands: the inner **Deeps** (10–14) and **the Unmapped** (15–20), the map's outermost eighth; `deeps` still names the whole country wherever a pack or a job asks (`Regions.within`). Every faction with a home has a lair in it on the built maps (`core/world_homes.gd`).
 - Factions come from the bestiary's hand-tagged `faction` field. The ones that field rosters are listed in `Scaler.FACTIONS`: goblinoid, beast, undead, bandit, giant, kobold, orc, gnoll, cultist, soldier, monstrosity, fey, elemental, construct and dragon.
 - Settlements have per-faction opinion (`core/faction_opinion.gd`). Persistent faction warfare is deferred (expansion-plan, "Post-T91 gap note").
 - Species-flavoured towns exist: human, dwarf, elf and orc settlement kits.
@@ -105,16 +105,29 @@ These are direction, not description. The code still does the old thing until ea
 Direction, not description: each lands as its own piece of work with its own `docs/plan/` entry, and the code does the old thing until then. Detail and evidence: `docs/audit-game-design.md`, "The owner's calls" (section numbers below).
 
 - **Death has weight.** A defeat revives the downed only; the dead stay dead until a paid raise, priced by level (about 50 ◉ a level). The bonded grieve, the fallen get a roll, the dead never come back as veterans, and deaths count in the open world too. (1.2, 2.1, 5.2)
-- **Defeat costs more than coin.** A floor not tied to the purse: days, an injury or gear. An empty purse pays a parley toll in gear or opinion. (1.8)
+- **Defeat costs more than coin — built 2026-09-25** (`core/defeat.gd`): a day lost, walked by the world, and a wound roll for the downed. An empty purse pays a parley toll in gear, never quest goods. (1.8)
 - **A lair resets when you leave it.** Every room regrows and is priced fresh off `Regions.fresh_score`, so a drained party never meets a smaller lair. (1.3, 3.3)
 - **Gambling** is once a day per town and loses on average; the lowest win pays the stake back. (1.5)
 - **Rope Trick** replaces the camp kit, not the risk: the slot is not refunded and the ambush roll stands. (1.6)
 - **A rest takes the world's time.** The world ticks through the 8 hours, nobody camps with a hostile band nearby, downtime refills only when a long rest is allowed, and the sheet has no rest or HP buttons. (1.1, 1.7, 1.9)
 - **The bench is people, not storage.** Restless mercs may leave, told as a moment; the bench joins camp moments and the relations web. No bench XP, no upkeep. (2.4)
-- **A failed parley costs faction opinion.** (3.1)
+- **A failed parley costs faction opinion** (built). A people that keeps none, bandits and goblins, takes the first round instead (built 2026-09-25). (3.1)
 - **Economy.** Loot sells for less, sinks scale with level, magic items work in a fight, friendly towns pay more. Quest XP follows the region's fight XP; renown and regard multiply gold only. Still no wages or upkeep. (5.1, 5.3, 5.6)
 - **Tone rules.** ◉ beside any number, "coin" or "gold" only in prose. "Company" in fiction, "party" only where a line states a rule. One register everywhere, the authored one: no contractions and no "!" in system messages or dice verdicts. Bands are named from `EnemyNames`, never by id. (6.1, 6.3–6.5)
 - **Art provenance** — built 2026-09-24: every AI asset directory has its `PROVENANCE.md` (see Art direction). (8.1)
+
+## Decided 2026-09-25 (the owner's yes answers after round one)
+
+Built in `docs/plan/2026-09-25-choices-with-teeth.md` unless marked otherwise.
+
+- **A failed parley with a band that keeps no opinion gives it the first round.** Civilized peoples keep the opinion cost.
+- **The company can be finished.** The whole roster dead after a defeat ends the run: a closing screen with who fell, days lasted, the renown title and the roll. The save slot is marked finished (listed, deletable, never resumed). The living go to the barracks and the dead do not. No lone survivor.
+- **The hermit's hollow stays ambush-free.** It has its own flag: no kit and no ambush roll. Rope Trick keeps the roll.
+- **Rope Trick's slot stays spent until the camp is made**, an inn night in between included. Decided, no code change.
+- **A level-17 sorcerer repeats one Metamagic pick** until a sixth option is built. Decided, no code change.
+- **Defeat costs a day and risks a wound**, whatever is in the strongroom. An empty purse pays a parley toll in gear.
+- **Bounties and rescues have deadlines**, shown on the posting and in the quest log. Past it the job fails and can be posted again. Errands and deliveries stay open. Old saves' quests never expire.
+- **A hero can leave the field from a board edge.** If everyone standing leaves, the fight is a withdrawal: no XP, loot or quest progress, and no defeat costs. The band stays on the map. Heroes left behind fight on, and anyone left lying there is lost.
 
 ## Open questions
 

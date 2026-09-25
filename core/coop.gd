@@ -260,7 +260,9 @@ static func apply(cb, i: Dictionary) -> Dictionary:
 # hold's caster), whose printed form is its object id — different on every
 # peer — so _plain() writes a combatant as its id.
 static func state_hash(cb) -> int:
-	var parts: Array = [cb.rng._state, cb.turn_idx, cb.round_num, cb.zones.size()]
+	# `withdrew` (the audit's §3.5): the one piece of fight state kept outside
+	# statuses, econ and pools — the withdrawn heroes' own statuses are hashed below.
+	var parts: Array = [cb.rng._state, cb.turn_idx, cb.round_num, cb.zones.size(), cb.withdrew]
 	for c in cb.combatants:
 		var pools := {}
 		for pid in c.pools:
