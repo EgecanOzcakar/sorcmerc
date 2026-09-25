@@ -352,9 +352,18 @@ static func record_settlement_visited(party, settlement_id: String) -> void:
 # scout_region — ride out into a band (core/regions.gd's rings) and come back
 # able to say what is there. Completes on crossing in, turns in back at the
 # giver; scenes/world/world.gd calls this from _check_region().
+#
+# Standing in a sub-band is standing in its country too (core/regions.gd's
+# part_of): a job sent to "deeps" completes out in the Unmapped, and the
+# regions_4 achievement counts countries, so crossing a seam inside the Far
+# Deeps is not a fifth region.
 static func record_region_reached(party, region_id: String) -> void:
-	Ach.collect("regions", region_id)
+	var Regions = load("res://core/regions.gd")   # load, as story.gd does: its preload chain is long to hang off this file
+	var country: String = Regions.country_of(region_id)
+	Ach.collect("regions", country)
 	_complete_world_target(party, "scout_region", "target_region_id", region_id)
+	if country != region_id:
+		_complete_world_target(party, "scout_region", "target_region_id", country)
 
 # supply_item — a counter wants goods in hand, and does not care how you came by
 # them: bought at the next town, looted, or already in the pack when they asked.

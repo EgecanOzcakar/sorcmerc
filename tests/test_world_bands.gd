@@ -76,6 +76,38 @@ func _init() -> void:
 				bad += 1
 	check(bad == 0, "frontier kinds never spawn inside the marches (%d did)" % bad)
 
+	# The Far Deeps' own peoples roam (the design audit §8.4, 2026-09-25): fey,
+	# elementals and constructs used to be met in a lair or nowhere. Over a few
+	# generated maps each of them walks, and only out in the Far Deeps — either
+	# half of that country, never the frontier or nearer.
+	var deep_seen := {}
+	var strays := 0
+	for s in [1, 2, 3, 4, 5, 6]:
+		var dw: World = ProceduralWorld.build(s)
+		for p in dw.parties:
+			if p.faction in ["fey", "elemental", "construct"]:
+				deep_seen[p.faction] = int(deep_seen.get(p.faction, 0)) + 1
+				if not Regions.within(dw, p.position, "deeps"):
+					strays += 1
+				check(String(p.ai.get("behavior", "")) == "hunt", "%s hunts like any monster band" % p.id)
+	for f in ["fey", "elemental", "construct"]:
+		check(int(deep_seen.get(f, 0)) > 0, "%s bands roam the Far Deeps (%d over six maps)" % [f, int(deep_seen.get(f, 0))])
+	check(strays == 0, "...and never nearer in (%d did)" % strays)
+	# By country, not by band: a kind that lives in the frontier and the Far
+	# Deeps is not sent to the deeps twice as often because the Deeps are two bands.
+	var front := 0
+	var deep := 0
+	for s in 12:
+		var gw: World = ProceduralWorld.build(100 + s)
+		for p in gw.parties:
+			if p.faction in ["giant", "monstrosity", "undead"]:
+				if Regions.within(gw, p.position, "deeps"):
+					deep += 1
+				elif Regions.band_of(gw, p.position) == "frontier":
+					front += 1
+	check(front > 0 and deep > 0 and float(deep) / float(front + deep) < 0.7,
+		"the frontier's shared kinds still split about evenly with the Far Deeps (%d frontier, %d deeps)" % [front, deep])
+
 	# determinism: same seed, same map
 	var a: World = LargeWorld.build()
 	var b: World = LargeWorld.build()

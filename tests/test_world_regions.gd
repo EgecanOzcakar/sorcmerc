@@ -12,6 +12,7 @@ const World = preload("res://core/world.gd")
 const Regions = preload("res://core/regions.gd")
 const Encounter = preload("res://core/encounter.gd")
 const Power = preload("res://core/rules/power.gd")
+const WorldHomes = preload("res://core/world_homes.gd")
 
 var _pass := 0
 var _fail := 0
@@ -47,6 +48,11 @@ func _init() -> void:
 		if Regions.band_of(w, l.position) == "heartland":
 			home_lairs += 1
 	check(home_lairs > 0, "the small map's heartland has a lair of its own")
+	# ...and every people with a home has a lair in it (core/world_homes.gd,
+	# 2026-09-25), the cult's included — the one boss that casts from slots.
+	check(WorldHomes.homeless(w).is_empty(), "every people has a lair on the small map (%s)" % str(WorldHomes.homeless(w)))
+	check(w.lairs.any(func(l): return l.faction == "cultist" and Regions.within(w, l.position, "frontier")),
+		"...the cult's in the frontier")
 
 	# --- the always-on label ------------------------------------------------
 	await _stand(main, Regions.anchor(w) + Vector2(200, 0))
@@ -84,6 +90,23 @@ func _init() -> void:
 	check(main._region_msg.text.find("back inside") >= 0, "...and is narrated that way (%s)" % main._region_msg.text)
 	check(main._event_card == null, "good news does not interrupt a march")
 	check(not main.world.clock.is_paused(), "...and does not stop the clock")
+
+	# --- the Unmapped: the Far Deeps' outer half (2026-09-25) ----------------
+	var outer: Array = Regions.ring(w, "unmapped")
+	var edge: Vector2 = Regions.anchor(w) + Vector2((float(outer[0]) + float(outer[1])) * 0.5, 0)
+	await _stand(main, far)
+	if main._event_card != null:
+		main._event_card.acknowledged.emit()
+	await _stand(main, edge)
+	check(Regions.band_of(w, edge) == "unmapped", "the edge of the small map is the Unmapped")
+	check(main._region_lbl.text.find("the Unmapped, levels 15 to 20") >= 0,
+		"the label names the new band and who it is for (%s)" % main._region_lbl.text)
+	check(main._region_msg.text.find("out into the Unmapped") >= 0,
+		"crossing the seam inside the Far Deeps is called out (%s)" % main._region_msg.text)
+	check(main._event_card != null, "...and, over the party's head, it stops the clock once")
+	if main._event_card != null:
+		main._event_card.acknowledged.emit()
+	await _stand(main, Regions.anchor(w) + Vector2(200, 0))
 
 	# --- the fight the band implies ----------------------------------------
 	# The band reaches the actual roster, not only the label: the same foe is a

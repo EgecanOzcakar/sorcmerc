@@ -86,7 +86,7 @@ scenes/
 tools/bug-relay/   the reporter's optional fallback: a Cloudflare Worker that
                    holds a repo-scoped token and files a report as an issue when
                    the player's browser will not open. Opt-in; see its README
-data/              the 5e SRD export (classes/spells/species/...), a 316-
+data/              the 5e SRD export (classes/spells/species/...), a 342-
                    entry hand-tagged bestiary, and data/effects/*.json (the
                    sorcmerc-authored mechanics layer over the raw export)
 content/           content packs that ship with the game: an example map, a
@@ -378,7 +378,7 @@ after every feature (this README is not re-synced per change, only on a
 health-check pass). Broad strokes as of the last such pass: character
 creation and leveling for all 12 classes/10 species, a hex tactical combat
 engine covering all 15 real 2024 conditions and all 8 weapon mastery
-properties, a 316-monster bestiary with faction/habitat-aware encounter
+properties, a 342-monster bestiary with faction/habitat-aware encounter
 building, a generated campaign route (sized settlements, quests, rest/
 treasure nodes, a seed-picked boss pool), shared party inventory with
 rarity-gated pricing and magic item identification, meta-progression

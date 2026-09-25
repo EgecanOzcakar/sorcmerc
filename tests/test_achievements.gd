@@ -402,8 +402,8 @@ func test_completionist() -> void:
 func test_goals_match_their_sources() -> void:
 	check(int(Ach.find("every_road_event")["goal"]) == Travel.EVENTS.size(),
 		"every_road_event's goal is the size of the road-event table")
-	check(int(Ach.find("regions_4")["goal"]) == Regions.BANDS.size(),
-		"regions_4's goal is how many bands the map actually has")
+	check(int(Ach.find("regions_4")["goal"]) == Regions.countries().size(),
+		"regions_4's goal is how many countries the map actually has (the Far Deeps are one, in two bands)")
 	# "Every class" has to mean every class. Adding a thirteenth without moving
 	# this goal would quietly leave the achievement earnable one short of what
 	# it says, which is the one way a threshold can be wrong and still pass.

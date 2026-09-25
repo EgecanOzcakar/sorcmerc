@@ -21,7 +21,9 @@ func check(cond: bool, label: String) -> void:
 func _init() -> void:
 	var w := LargeWorld.build()
 	check(w.settlements.size() == 8, "large world has 8 settlements (got %d)" % w.settlements.size())
-	check(w.lairs.size() == 5, "large world has all 5 named lairs (got %d)" % w.lairs.size())
+	# The five named lairs and a lair for every other people with a home
+	# (core/world_homes.gd, 2026-09-25).
+	check(w.lairs.size() == 15, "large world has its 5 named lairs and 10 more (got %d)" % w.lairs.size())
 	check(w.player() != null, "large world has a player party")
 	check(String(w.origin.get("kind", "")) == "large" and int(w.origin.get("seed", -1)) == 0,
 		"the large world says which builder made it (T-water provenance)")

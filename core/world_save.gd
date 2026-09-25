@@ -25,7 +25,8 @@
 #   "elapsed": 742.5,                 // World.clock.elapsed, world-minutes
 #   "opinion": {"soldier": -12.0},    // FactionOpinion.all()
 #   "ladder": {"deeds": {"human": 13}, "audiences": ["human"]},   // Ladder.all()
-#   "origin": {"kind": "procedural", "seed": 42},   // which builder made this map
+#   "origin": {"kind": "procedural", "seed": 42, "homes": true},   // which builder made this map;
+#                                     // "homes": its lair-for-every-people pass is done (core/world_homes.gd)
 #   "settlements": [
 #     {"id": "riverhold", "sname": "Riverhold", "position": [0, 0], "faction": "soldier",
 #      "kind": "city", "last_visited": 120.0, "battle_at": -1.0, "pending_opinion_delta": 0.0}
@@ -74,6 +75,7 @@ const Recruits = preload("res://core/recruits.gd")
 const Bench = preload("res://core/bench.gd")
 
 const SaveDir = preload("res://core/save_dir.gd")
+const WorldHomes = preload("res://core/world_homes.gd")
 const FORMAT := "sorcmerc-world"
 const VERSION := 1
 
@@ -241,7 +243,8 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		"opinion": FactionOpinion.all(),
 		"ladder": Ladder.all(),
 		"origin": {"kind": String(world.origin.get("kind", "small")),
-			"seed": int(world.origin.get("seed", 0))},
+			"seed": int(world.origin.get("seed", 0)),
+			"homes": true},   # core/world_homes.gd has had its say on this map (see from_dict)
 		"settlements": settlements,
 		"parties": parties,
 		"fallen": world.fallen.map(func(f): return {"id": f["id"], "faction": f["faction"],
@@ -339,6 +342,14 @@ static func from_dict(d: Dictionary):
 	var origin: Dictionary = d.get("origin", {})
 	world.origin = {"kind": String(origin.get("kind", "small")),
 		"seed": int(origin.get("seed", 0))}
+	# A save from before every people had a lair (2026-09-25) holds the five old
+	# ones; a map the game built gets the rest, in their home countries, once.
+	# "homes" marks every save written since: a map saved by this build was
+	# either built with them or already backfilled, and is left as it is — a
+	# lair the player has seen does not move, and a test world stays its size.
+	# Never on a pack's map (WorldHomes.BUILT).
+	if not bool(origin.get("homes", false)):
+		WorldHomes.backfill(world)
 
 	FactionOpinion.reset()
 	var opinion: Dictionary = d.get("opinion", {})

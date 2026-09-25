@@ -14,6 +14,7 @@
 #   Regions.at(world, pos)              # {id, label, levels, ...} for a point
 #   Regions.power_scale(world, pos, party)   # the budget knob that band implies
 #   Regions.suits("deeps", "dragon")    # where a faction belongs, for placement
+#   Regions.within(world, pos, "deeps") # a yes-or-no question: a country holds its sub-bands
 #
 # The rule is a CLAMP, not a replacement: inside its band a fight is still built
 # for the party that is standing there, which keeps every measured number in
@@ -41,7 +42,7 @@ const Presets = preload("res://core/presets.gd")
 const Scaler = preload("res://core/scaler.gd")
 
 # The rings, nearest first. `upto` is a fraction of the map's own extent (see
-# extent()), so the same four bands fit the 800-unit small map and the
+# extent()), so the same bands fit the 800-unit small map and the
 # 2000-unit large one. `levels` is [min, max] and is the whole mechanism: it
 # clamps the level a fight out here is built for.
 #
@@ -49,8 +50,8 @@ const Scaler = preload("res://core/scaler.gd")
 # the marches and the bottom of the frontier, and is meant to be able to work
 # either. A gap would make some level nobody's level.
 #
-# Except the last seam, which meets without overlapping: the frontier stops at
-# 9 and the deeps start at 10 (the owner's call, 2026-09-24). With the frontier
+# Except the frontier's seam, which meets without overlapping: the frontier
+# stops at 9 and the deeps start at 10 (the owner's call, 2026-09-24). With the frontier
 # at 6-10, a level 10 party was in band on both sides of that seam and read two
 # different fights: at the frontier's top, capped at the ruler's level-10 fight
 # (power_scale), a built party won 95.0%; at the deeps' bottom, with no cap
@@ -84,9 +85,35 @@ const BANDS := [
 		"blurb": "Still somebody's country, but nobody rides it alone after dark."},
 	{"id": "frontier", "label": "the Frontier", "upto": 0.87, "levels": [6, 9],
 		"blurb": "Past the last waystone. What lives here has never been taxed."},
-	{"id": "deeps", "label": "the Far Deeps", "upto": 999.0, "levels": [10, 20],
+	{"id": "deeps", "label": "the Far Deeps", "upto": 0.94, "levels": [10, 14],
 		"blurb": "Old ground, and old things on it. Nothing out here is anybody's problem but yours."},
+	{"id": "unmapped", "label": "the Unmapped", "upto": 999.0, "levels": [15, 20], "part_of": "deeps",
+		"blurb": "Past anywhere with a name. The maps stop here because the people drawing them did."},
 ]
+
+# The Far Deeps are two bands since 2026-09-25 (the design audit,
+# docs/audit-game-design.md §5.4, the owner's call): the inner Deeps at 10-14
+# and the Unmapped at 15-20, meeting without overlap for the reason the
+# frontier's seam gives above. One band ten levels wide had no far away inside
+# it — a level 11 party and a level 19 one read the same country, every fight
+# in it followed the party up, and the audit estimated it at about a hundred
+# fights of a run, most of the game on one unvarying ring. Now the outer half
+# is a place a level 10 party can see and cannot yet work, which is the thing
+# every other seam on the map already was.
+#
+# The split sits at the equal-area point of the old ring (sqrt((0.87^2+1)/2) =
+# 0.937): each half of the Far Deeps is an eighth of the map.
+#
+# `part_of` is what keeps the split from being a rename. The Far Deeps are still
+# ONE COUNTRY — the fourth of four (countries(), country_of()) — and "deeps"
+# still names all of it wherever something outside this file asks a yes-or-no
+# question of a band: a pack's {"region": "deeps"} (core/mod/story_runtime.gd),
+# a scout_region job sent to the deeps, a trait that holds "in the deeps", the
+# regions_4 achievement, placement INTO the deeps (ring_fracs). A band id is
+# pack-visible vocabulary (tests/test_mod_api.gd's world.bands), so the new
+# band was added and the old id kept its meaning, as the compat rule says to.
+# What reads the precise band is what should: the level clamp, the HUD, the
+# crossing card, the caster tier.
 
 # A map has to be at least this wide before banding it means anything — under
 # that, everything is the heartland rather than four rings a stone's throw
@@ -105,6 +132,7 @@ const HOMES := {
 	"marches": ["goblinoid", "kobold", "orc", "gnoll", "bandit", "beast"],
 	"frontier": ["undead", "orc", "gnoll", "cultist", "monstrosity", "giant"],
 	"deeps": ["dragon", "giant", "undead", "elemental", "construct", "fey", "monstrosity"],
+	"unmapped": ["dragon", "giant", "undead", "elemental", "construct", "fey", "monstrosity"],
 }
 
 
@@ -165,6 +193,35 @@ static func band_by_id(id: String) -> Dictionary:
 		if String(b["id"]) == id:
 			return b
 	return {}
+
+
+# The country a band belongs to: its `part_of`, or itself. An unknown id comes
+# back unchanged, so a caller comparing two of them still compares strings.
+static func country_of(band_id: String) -> String:
+	return String(band_by_id(band_id).get("part_of", band_id))
+
+
+# The four countries, nearest first — the bands that are nobody's sub-band.
+static func countries() -> Array:
+	var out: Array = []
+	for b in BANDS:
+		if not b.has("part_of"):
+			out.append(String(b["id"]))
+	return out
+
+
+# Whether a point is in the named band, reading a country as all of its bands:
+# within(w, p, "deeps") holds in the Unmapped too. What every yes-or-no question
+# from outside this file asks, so an id written before the split keeps meaning
+# what it meant (see BANDS).
+static func within(world, pos: Vector2, band_id: String) -> bool:
+	return holds(band_of(world, pos), band_id)
+
+
+# The same test with the band already read: `here` is where something is, `want`
+# the id something asked for.
+static func holds(here: String, want: String) -> bool:
+	return here == want or country_of(here) == want
 
 
 # What the party is, in one number, because a band is expressed in levels. The
@@ -403,6 +460,51 @@ static func fight_xp(level: int) -> int:
 # in the heartland scaler's level-3 one. For the ruler party the pin and the old
 # ratio are the same number, so the table above stands as measured; what moved
 # is every party that is not the ruler (see power_scale).
+#
+# RE-MEASURED 2026-09-25, for the Far Deeps' split and the 26 CR 11-20
+# statblocks data/bestiary.json gained the same day. tests/sweep_regions.gd,
+# 200 seeds a cell (all rows, not a subset), tier easy, fight seed pinned, back
+# to back on master (a2faa01) and the branch. The last five rows are new: the
+# cells the split made mean something on the map.
+#
+#   party  content   scale   master   branch
+#   lvl 3   lvl 3    x1.00    96.5%    96.5%
+#   lvl 5   lvl 5    x1.00    97.5%    97.5%
+#   lvl 6   lvl 6    x1.00    99.0%    99.0%
+#   lvl 8   lvl 8    x1.00    96.5%    96.5%
+#   lvl 10  lvl 10   x1.00    96.0%    96.0%
+#   lvl 12  lvl 12   x1.00    99.0%    99.0%
+#   lvl 15  lvl 15   x1.00    95.5%    94.5%
+#   lvl 6   lvl 3    x0.44     100%     100%
+#   lvl 10  lvl 3    x0.30     100%     100%
+#   lvl 3   lvl 6    x2.26    28.0%    28.0%
+#   lvl 3   lvl 10   x3.38     2.5%     2.5%
+#   lvl 10  lvl 15   x1.47    71.5%    71.5%   <- level 10 in the Unmapped
+#   lvl 12  lvl 15   x1.22    88.0%    84.5%   <- level 12 in the Unmapped
+#   lvl 15  lvl 14   x0.95    98.0%    97.5%   <- level 15 back in the inner Deeps
+#   lvl 20  lvl 14   x0.67     100%     100%   <- level 20 back in the inner Deeps
+#   lvl 3   lvl 15   x4.97     0.0%     0.0%   <- level 3 at the very edge
+#
+# Read it in two columns for two different claims. The sweep's cells are
+# (party, content) level pairs, so the split cannot move a row — it moves which
+# row a place on the map IS. Before it, a level 10 party at the far edge of the
+# map was in band (the 10/10 row, 96.0%); now it is one band out (10/15,
+# 71.5%). A level 12 party there goes 99.0% -> 84.5%; a level 15 party in the
+# inner Deeps goes from in band (94.5%) to a pinned level-14 fight (97.5%). So
+# the new seam is a real step, and a gentler one than the frontier's: one band
+# out at level 10 is 71.5% where level 3 one band out is 28.0%, because level 15
+# content is x1.47 of a level 10 party and level 6 content x2.26 of a level 3
+# one. The Unmapped is a place a level 10 company can work, badly, at easy.
+# Whether it should be a wall is a balance call this entry did not make (the
+# 2026-09-25 build log's Still open).
+#
+# The branch column differs from master by the new statblocks alone, and every
+# row is inside noise (the largest move, 12/15's 3.5 points, is 1.3 standard
+# errors at 200 seeds). They barely register because the budget buys bodies
+# first (core/scaler.gd MAX_FOES): over 200 pinned seeds a level 15 party's
+# easy roster fields a CR 11+ creature 6 times, a level 20 party's hard roster
+# 20 times, and the rest of the time spends the same budget on four to eight
+# smaller things. NO KNOB MOVED.
 
 # --- placement, for the world builders ------------------------------------
 
@@ -416,13 +518,18 @@ static func home_band(faction: String) -> String:
 	for b in BANDS:
 		if suits(String(b["id"]), faction):
 			return String(b["id"])
-	return String(BANDS[-1]["id"])
+	return String(countries()[-1])
 
 
-# Where a band sits as a share of the map, [min, max]. The deeps' `upto` is a
-# sentinel (everything past the last seam is the deeps), so it clamps to 1.0
-# here — a builder placing INTO the deeps must stay on the map, even though a
-# thing that wandered off it would still read as being there.
+# Where a band sits as a share of the map, [min, max]. The last band's `upto` is
+# a sentinel (everything past the last seam is the Unmapped), so it clamps to
+# 1.0 here — a builder placing INTO it must stay on the map, even though a thing
+# that wandered off it would still read as being there.
+#
+# The band exactly, not its country: ring_fracs("deeps") is the inner Deeps,
+# where band_of() says "deeps", so a lair placed in its faction's home band
+# (procedural_world.gd, core/world_homes.gd) lands where that band's floor is
+# the level it is built for. country_fracs() is the whole country.
 static func ring_fracs(band_id: String) -> Array:
 	var lo := 0.0
 	for b in BANDS:
@@ -433,11 +540,37 @@ static func ring_fracs(band_id: String) -> Array:
 	return [0.0, 1.0]
 
 
+# A country's share of the map, [min, max]: its own band's inner edge to its
+# last sub-band's outer one. The same as ring_fracs() for a country with no
+# sub-bands, which is three of the four.
+static func country_fracs(country_id: String) -> Array:
+	var lo := -1.0
+	var hi := 0.0
+	var prev := 0.0
+	for b in BANDS:
+		var top: float = minf(float(b["upto"]), 1.0)
+		if country_of(String(b["id"])) == country_id:
+			if lo < 0.0:
+				lo = prev
+			hi = top
+		prev = top
+	return [0.0, 1.0] if lo < 0.0 else [lo, maxf(lo + 0.01, hi)]
+
+
 # The distance from the anchor a thing belonging to this band should be placed
 # at, as [min, max] world units on this map. Builders scatter inside it.
 static func ring(world, band_id: String) -> Array:
+	return _units(world, ring_fracs(band_id))
+
+
+# ring() for a whole country — core/world_bands.gd scatters a roaming band
+# anywhere in its faction's countries.
+static func country_ring(world, country_id: String) -> Array:
+	return _units(world, country_fracs(country_id))
+
+
+static func _units(world, f: Array) -> Array:
 	var ext: float = extent(world)
-	var f: Array = ring_fracs(band_id)
 	return [float(f[0]) * ext, maxf(float(f[0]) * ext + 1.0, float(f[1]) * ext)]
 
 

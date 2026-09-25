@@ -24,7 +24,12 @@ func _init() -> void:
 	for s in w1.settlements:
 		races[s.faction] = true
 	check(races.size() == 4, "all four races present, no dupes/gaps (got %s)" % str(races.keys()))
-	check(w1.lairs.size() == 5, "all five named lairs (got %d)" % w1.lairs.size())
+	# The five named lairs, then one for each of the ten other peoples with a
+	# home (core/world_homes.gd, 2026-09-25) — fifteen factions less soldier,
+	# which has no home, and less the four the five already house.
+	check(w1.lairs.size() == 15, "the five named lairs and ten more (got %d)" % w1.lairs.size())
+	for i in ProceduralWorld.LAIRS.size():
+		check(w1.lairs[i].id == String(ProceduralWorld.LAIRS[i][0]), "the named five come first (%s)" % w1.lairs[i].id)
 	check(w1.player() != null, "has a player party")
 	# T-water: provenance — the seed is the map, so a save has to carry it.
 	check(String(w1.origin.get("kind", "")) == "procedural"
@@ -64,8 +69,10 @@ func _init() -> void:
 		# always the long ride and the goblins are always the near thing.
 		for l in w.lairs:
 			var want: String = Regions.home_band(l.faction)
+			# Home is a country: the dragon's cave may sit in either half of the Far
+			# Deeps (the Unmapped is their outer half, core/regions.gd).
 			var got: String = Regions.band_of(w, l.position)
-			check(got == want, "seed %d: %s (%s) sits in the %s, not the %s" % [
+			check(Regions.within(w, l.position, want), "seed %d: %s (%s) sits in the %s, not the %s" % [
 				seed_v, l.id, l.faction, want, got])
 
 	print("test_procedural_world: %d passed, %d failed" % [_pass, _fail])

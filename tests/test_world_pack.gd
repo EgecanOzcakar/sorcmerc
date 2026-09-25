@@ -148,7 +148,7 @@ func test_shipped_map_is_banded() -> void:
 		"the goblin warren is in the country a level 1-3 party can work")
 	check(Regions.band_of(w, _lair(w, "barrow-of-kings").position) == "frontier",
 		"the barrow is two countries out")
-	check(Regions.band_of(w, _lair(w, "wyrmscar").position) == "deeps",
+	check(Regions.within(w, _lair(w, "wyrmscar").position, "deeps"),   # either half of the Far Deeps
 		"and the dragon is at the end of the map")
 
 func _lair(w, id):
