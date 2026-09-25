@@ -527,6 +527,16 @@ func _process(_dt: float) -> void:
 		var saved = WorldSave.from_dict(Coop.link.world_pending)
 		Coop.link.world_pending = {}
 		Coop.split = Coop.link.owners_latest   # the host's choice of who plays whom, so Coop.mine() agrees here
+		# A finished company (core/defeat.gd) ends on this screen too: the host's
+		# _end_company autosaves with party.finished written, and that save is
+		# the one that crosses the wire. The guest reads the same record the
+		# host's closing screen does, instead of a map nobody is left on. The
+		# barracks and the slot are the host's; nothing is written here.
+		if saved != null and not saved["party"].finished.is_empty():
+			_guest_combat = null
+			_guest_on_map = false
+			show_company_end(saved["party"].finished)
+			return
 		if saved != null:
 			var old = _screen if _guest_on_map else null   # keep the guest's own camera across the rebuild
 			_guest_combat = null
