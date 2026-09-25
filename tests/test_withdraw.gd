@@ -2,7 +2,9 @@
 # §3.5; core/combat.gd's _leave_field). A hero on an edge hex spends the action
 # to walk off; the heroes left behind fight on; when the last one standing
 # walks off, the fight ends as a WITHDRAWAL — no XP, no loot, no quest
-# progress, and not a defeat — and anyone left lying on the field is dead.
+# progress, and not a defeat — and anyone left lying on the field is dead,
+# unless a hero walked off from the hex beside them and carried them out (the
+# owner's call, 2026-09-25): off the field, stable, and home at 1 HP.
 # The co-op half: the verb crosses the wire by id, a refused one changes
 # nothing, and `withdrew` is in the hash.
 #   godot --headless --path . -s tests/test_withdraw.gd
@@ -29,7 +31,9 @@ func _init() -> void:
 	test_leave()
 	test_everyone_leaves()
 	test_left_behind_lose()
+	test_carried_off()
 	test_coop()
+	test_coop_carry()
 	print("test_withdraw: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -171,12 +175,13 @@ func test_everyone_leaves() -> void:
 	var down = hs[-1]
 	down.hp = 0
 	down.statuses["down"] = true
+	down.pos = _interior(cb)   # nobody walks off from beside them
 	var kill = foes[0]
 	cb._apply_damage(kill, 999999)
 	check(kill.is_dead(), "fixture: one goblin is dead before the company goes")
 	var walkers: Array = hs.slice(0, hs.size() - 1)
 	for w in walkers:
-		w.pos = _free_edge(cb, foes)
+		w.pos = _free_edge(cb, foes + [down])
 		cb.perform(w, _verb(cb, w))
 	check(cb.withdrew and cb.is_over() and cb.outcome() == Combat.WITHDRAWN,
 		"the last one standing walks off: the fight ends as a withdrawal (%s)" % cb.outcome())
@@ -227,3 +232,109 @@ func test_coop() -> void:
 	b.withdrew = not b.withdrew
 	check(Coop.state_hash(a) != Coop.state_hash(b), "withdrew is in the hash: drift in it would show")
 	check(mid != Combat.NOWHERE, "fixture: an interior hex exists")
+
+# An edge hex with a free board hex beside it, clear of `not_near` by more than
+# two: somewhere a downed hero can lie next to a hero about to walk off.
+func _edge_with_room(cb: Combat, not_near: Array) -> Array:
+	var taken: Array = cb.combatants.map(func(c): return c.pos)
+	for e in cb.edge_hexes():
+		if e in taken or not_near.any(func(c): return Hex.distance(c.pos, e) <= 2):
+			continue
+		for n in Hex.neighbors(e):
+			if n in cb.board["hexes"] and not n in taken and not not_near.any(func(c): return Hex.distance(c.pos, n) <= 2):
+				return [e, n]
+	return []
+
+func _down(c) -> void:
+	c.hp = 0
+	c.statuses["down"] = true
+	c.death_f = 2
+
+func test_carried_off() -> void:
+	var cb := _fight(_spec())
+	var foes: Array = cb.team_of("foe")
+	var hs: Array = cb.heroes()
+	check(hs.size() >= 3, "fixture: three heroes or more (%d)" % hs.size())
+	var carrier = hs[0]
+	var fallen = hs[1]
+	var lost = hs[2]
+	var rest: Array = hs.slice(3)
+	# the fallen lies beside the carrier's edge hex; the other downed lies far inside
+	_down(lost)
+	lost.pos = _interior(cb)
+	var spot := _edge_with_room(cb, foes + [lost])
+	check(spot.size() == 2, "fixture: an edge hex with room beside it")
+	carrier.pos = spot[0]
+	fallen.pos = spot[1]
+	_down(fallen)
+	var second = null
+	for n in Hex.neighbors(carrier.pos):
+		if n in cb.board["hexes"] and n != fallen.pos and not cb.combatants.any(func(c): return c.pos == n):
+			second = n
+			break
+	# a second downed hero beside the same carrier: one pair of arms, one body
+	var extra = null
+	if not rest.is_empty() and second != null:
+		extra = rest[0]
+		rest = rest.slice(1)
+		extra.pos = second
+		_down(extra)
+	cb.perform(carrier, _verb(cb, carrier))
+	check(carrier.has("withdrawn"), "the carrier leaves the field")
+	check(fallen.has("withdrawn") and fallen.pos == Combat.NOWHERE and not fallen.is_dead(),
+		"the downed hero beside them goes too: off the board, alive")
+	check(fallen.is_stable() and fallen.is_down() and fallen.hp == 0 and fallen.death_f == 0,
+		"...stable, out cold at 0 HP, their failed saves wiped")
+	check(cb.log.any(func(l): return String(l).contains("carrying %s" % fallen.cname)), "the log says who carried whom")
+	if extra != null:
+		check(not extra.has("withdrawn") and extra.pos != Combat.NOWHERE, "a second downed hero beside the same carrier stays: one body each")
+	check(not cb.is_over() or rest.is_empty(), "the ones still standing fight on")
+	# the carried hero never takes a turn again, so never rolls a save again
+	var seen := false
+	for i in cb.order.size() * 3:
+		if cb.is_over():
+			break
+		cb.end_turn()
+		if cb.current() == fallen:
+			seen = true
+	check(not seen, "a carried hero never gets another turn")
+	# everyone else standing walks off from well away from the far one
+	for w in rest:
+		w.pos = _free_edge(cb, foes + [lost] + ([extra] if extra != null else []))
+		cb.perform(w, _verb(cb, w))
+	check(cb.withdrew and cb.outcome() == Combat.WITHDRAWN, "the last one off makes it a withdrawal")
+	check(lost.is_dead(), "the downed hero nobody stood beside is dead, as before")
+	if extra != null:
+		check(extra.is_dead(), "...and so is the one the carrier's arms were too full for")
+	check(not fallen.is_dead(), "the carried hero is not")
+	var chars: Array = Presets.party()
+	var res: Dictionary = Encounter.resolve_outcome(cb, chars)
+	check(not fallen.id in res["deaths"] and lost.id in res["deaths"], "the result's dead: the left-behind, not the carried")
+	var ch = null
+	for x in chars:
+		if x.id == fallen.id:
+			ch = x
+	Adapter.write_back(fallen, ch)
+	check(ch != null and ch.hp_current == 1 and not ch.dead, "the carried hero comes to at 1 HP on the walk home (%d)" % (ch.hp_current if ch != null else -1))
+	check(Combat.withdrawal_line([lost.cname]).contains(lost.cname), "the withdrawal line names only the left-behind")
+
+func test_coop_carry() -> void:
+	var a := _fight(_spec(), 29)
+	var b := _fight(_spec(), 29)
+	var sides := []
+	for cb in [a, b]:
+		var hs: Array = cb.heroes()
+		var spot := _edge_with_room(cb, cb.team_of("foe"))
+		hs[0].pos = spot[0]
+		hs[1].pos = spot[1]
+		_down(hs[1])
+		sides.append(hs)
+	check(Coop.state_hash(a) == Coop.state_hash(b), "fixture: both peers hold the same fallen beside the same carrier")
+	var ha = sides[0][0]
+	var intent: Dictionary = Coop.perform(ha, _verb(a, ha), null)
+	a.perform(ha, _verb(a, ha))
+	Coop.apply(b, intent)
+	check(sides[1][1].has("withdrawn") and sides[1][1].is_stable(), "the carry happens on the guest's side from the same intent")
+	check(Coop.state_hash(a) == Coop.state_hash(b), "...and both peers agree after it")
+	sides[1][1].statuses.erase("stable")
+	check(Coop.state_hash(a) != Coop.state_hash(b), "the carried hero's stable is in the hash: drift in it would show")

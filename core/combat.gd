@@ -877,6 +877,20 @@ func is_over() -> bool:
 # mercy rule (core/ai.gd's MERCY) has nothing left to hold the foes back.
 # If instead the heroes left behind are all beaten, it is a defeat as ever.
 #
+# A hero who walks off carries a downed comrade from an ADJACENT hex with them
+# (the owner's call, 2026-09-25, on the build log's "the downed left behind
+# die"): one each, since one pair of arms carries one body, and the first such
+# hero in the combatants' own order when there are two, so both co-op peers
+# pick the same one. The carried hero is off the field the same way
+# (`withdrawn`, NOWHERE) and STABLE — out cold at 0 HP and no longer rolling —
+# which is where the existing rules already put a downed hero who has nobody
+# left to finish them and no turn to roll on; write_back brings them round at
+# 1 HP at the fight's end, as it does anyone stable. It is free, as the step
+# off the edge is the carrier's action already. Anyone downed and not beside
+# a leaver still dies with the withdrawal, as before: carrying is a reason to
+# leave from beside the fallen, not a free escape for half a company on the
+# ground. A carrier cut down by the parting swing carries nobody.
+#
 # Only where the fight allows it: can_withdraw, which Encounter.build reads off
 # the spec's `withdraw` key — the open world's road fights set it (world.gd's
 # _launch_combat). A site's room has its own way out between rooms, the pit is
@@ -942,10 +956,18 @@ func _leave_field(c) -> Dictionary:
 		_end_concentration(c, "lets go of %s on the way out" % Effects.humanize(String(c.statuses["concentrating"]["spell"])))
 	for k in ["dodging", "hidden", "helped", "disengaged"]:
 		c.statuses.erase(k)
+	var carried = _carried_by(c)
 	c.statuses["withdrawn"] = true
 	c.pos = NOWHERE
+	if carried != null:
+		carried.statuses["withdrawn"] = true
+		carried.statuses["stable"] = true
+		carried.death_s = 0
+		carried.death_f = 0
+		carried.pos = NOWHERE
 	_release_grapples()
-	log.append("%s leaves the field." % c.cname)
+	log.append("%s leaves the field." % c.cname if carried == null
+		else "%s leaves the field, carrying %s." % [c.cname, carried.cname])
 	if heroes().is_empty():
 		withdrew = true
 		var left: Array = []
@@ -955,6 +977,16 @@ func _leave_field(c) -> Dictionary:
 				left.append(o.cname)
 		log.append(withdrawal_line(left))
 	return {"left": true}
+
+# The downed hero `c` carries off the field as they go: the first hero in the
+# combatants' order who is down (not dead), still on the board, and in a hex
+# next to `c`'s. null when there is nobody to carry.
+func _carried_by(c):
+	for o in combatants:
+		if o != c and is_hero(o) and o.is_down() and not o.has("withdrawn") \
+				and Hex.distance(o.pos, c.pos) == 1:
+			return o
+	return null
 
 # What the company's withdrawal says, in the log and on the map: who, if
 # anyone, was left lying on the field.
@@ -1175,7 +1207,7 @@ const BASIC := [
 	# The design audit §3.5: off the board's edge. Only a hero, only where the
 	# fight allows it (can_withdraw), only from an edge hex — see leave_refusal().
 	{"id": "leave_field", "label": "Leave the field", "kind": "withdraw", "cost": "action", "targeting": "self",
-		"text": "Walk off the board's edge and out of the fight. If everyone standing leaves, the fight ends: nothing won, nothing lost but the ones left lying here."},
+		"text": "Walk off the board's edge and out of the fight, carrying a downed comrade from a hex beside you. If everyone standing leaves, the fight ends: nothing won, nothing lost but the ones left lying here."},
 ]
 
 # Feature kinds that are a button. The rest are passive: passive_damage folds into
