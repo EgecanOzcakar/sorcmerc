@@ -92,6 +92,8 @@ const Figures3D = preload("res://scenes/figures3d.gd")
 const Ach = preload("res://core/achievements.gd")
 const Leveling = preload("res://core/leveling.gd")   # #118: who is owed a level
 const Ladder = preload("res://core/ladder.gd")
+const Defeat = preload("res://core/defeat.gd")   # audit 1.8: what a loss costs past the purse, and the end of a company
+const Combat = preload("res://core/combat.gd")   # audit 3.5: its WITHDRAWN outcome and the line for it
 const Callings = preload("res://core/callings.gd")
 const EnemyNames = preload("res://core/enemy_names.gd")   # a band's name, never its id
 const Downtime = preload("res://core/downtime.gd")
@@ -1230,7 +1232,7 @@ func _build_quest_panel() -> void:
 		rows.add_child(none)
 	for q in live:
 		var l := Label.new()
-		l.text = Quest.describe(q)
+		l.text = Quest.describe(q, world.clock.elapsed)   # with its days left, if it has a deadline
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.add_theme_color_override("font_color",
 			Icons.COL_GOLD if q["state"] == "complete" else Icons.COL_PARTY)
@@ -1871,6 +1873,9 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 	var objective: Dictionary = {} if named else _road_objective(foe, jumped)
 	var kind := String(objective.get("kind", ""))
 	var spec: Dictionary = encounter_spec(foe, "hard" if jumped == "dark" else difficulty)
+	# The design audit §3.5: out here a hero may walk off the board's edge
+	# (core/combat.gd). A site's room, the pit and the linear run do not set it.
+	spec["withdraw"] = true
 	if kind == "hold":
 		objective["waves"] = _hold_waves(foe, spec, threat)
 	if kind != "":
@@ -1916,16 +1921,38 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 			FactionOpinion.credit_fight(world, foe.position, FactionOpinion.FOUGHT_FOR, foe.faction)
 		elif not named:
 			FactionOpinion.lower(foe.faction, FactionOpinion.KILLED_THEIRS)
+	elif String(result.get("outcome", "")) == Combat.WITHDRAWN:
+		# The design audit §3.5: every hero still standing walked off the board's
+		# edge (core/combat.gd). Not a win — no XP, no loot, no quest progress,
+		# nothing banked — and not a defeat: no gold tax, no lost day, no wound
+		# roll, nobody moved to a town. The band is still on the map where the
+		# fight was; it is marked slipped and given a truce, the way a band that
+		# was slipped past is, so the card does not open again this frame. Anyone
+		# left lying on the field when the last one walked off is dead, and that
+		# is applied like any fight's deaths.
+		_apply_deaths(result)
+		_slipped[foe.id] = true
+		WorldAI.truce(foe, world.player(), world.clock.elapsed)
+		_lair_msg.text = Combat.withdrawal_line(result.get("deaths", []).map(
+			func(id): return party.get_member(String(id)).cname if party.get_member(String(id)) != null else String(id)))
 	else:
 		# Deaths before the retreat, the same order a site wipe uses: the dead
 		# are dead when revive_downed runs, so it cannot stand them up.
 		_apply_deaths(result)
-		_retreat(result.get("deaths", []))
+		_retreat(result.get("deaths", []), result.get("downed", []))
 		# The band that beat them is still where the fight was. Left un-slipped
 		# it would ask "fight/parley/ambush?" again the frame the map came back
 		# whenever the nearest settlement was inside its trigger radius — the
-		# same card the beaten party had just answered.
+		# same card the beaten party had just answered. And since the company now
+		# lies a day where it fell (core/defeat.gd), the band may have walked off
+		# and back by the morning, which clears a slip: the victors' truce keeps
+		# them from coming straight back for the beaten, the same truce a band
+		# that was slipped past gives.
 		_slipped[foe.id] = true
+		WorldAI.truce(foe, world.player(), world.clock.elapsed)
+		if not party.finished.is_empty():
+			_end_company()   # nobody is left: the run ends here, not on the map
+			return result
 	# The carter dead, or the party beaten with the crate on the road: the
 	# delivery is lost either way, and the board can post the run again.
 	if String(obj.get("kind", "")) == "escort" and not bool(obj.get("done", false)):
@@ -2043,7 +2070,10 @@ func _show_spoils(result: Dictionary) -> void:
 	# written; a lost fight's page is that line, not an empty spoils list.
 	if not won and _lair_msg != null and _lair_msg.text != "":
 		rows.append([_lair_msg.text, Icons.COL_FOE])
-	_build_spoils_panel("Victory" if won else "Defeat", rows)
+	# A withdrawal (the audit's §3.5) is its own heading: not a win, and not the
+	# defeat page either, since nothing a defeat costs was paid.
+	var withdrew: bool = String(result.get("outcome", "")) == Combat.WITHDRAWN
+	_build_spoils_panel("Victory" if won else ("Withdrawn" if withdrew else "Defeat"), rows)
 
 # The company on the after-action page: a card each for the ones who marched —
 # glyph, name, the HP they walked out with and how far to the next level.
@@ -2326,22 +2356,55 @@ func _apply_deaths(result: Dictionary) -> void:
 # when it runs — the road and a site wipe used to do it in opposite orders.
 # `fell` is the fight's own `deaths`, for the line only. Returns the line, which
 # is also put on the map.
+#
+# The design audit §1.8 (2026-09-25): the gold is not the whole price any more,
+# because the strongroom can keep a purse out of its reach. core/defeat.gd adds
+# a floor the purse cannot touch — the company comes to Defeat.DAYS_LOST later,
+# the world walking through the time (core/world_rest.gd, with this screen's
+# off-screen battles), and every hero the fight put down (`downed`, the
+# result's own list) rolls for a wound. And if nobody at all is left alive, the
+# company is finished: party.finished takes the record, and the caller ends
+# the run (_end_company) instead of showing a map.
 const DEFEAT_GOLD_LOSS_PCT := 0.15
-func _retreat(fell: Array = []) -> String:
+func _retreat(fell: Array = [], downed: Array = []) -> String:
 	var p := world.player()
 	if p == null or world.settlements.is_empty():
 		return ""
 	var lost: int = roundi(party.gold * DEFEAT_GOLD_LOSS_PCT)
 	party.spend_gold(lost)
 	var revived: Dictionary = Party.revive_downed(party)
+	if bool(revived.get("finished", false)):
+		party.finished = Defeat.ending(party, world, fell)
+		_lair_msg.text = party.defeat_line(revived, fell, "", lost)
+		return _lair_msg.text
 	var safe = world.settlements[0]
 	for s in world.settlements:
 		if p.position.distance_squared_to(s.position) < p.position.distance_squared_to(safe.position):
 			safe = s
 	p.position = safe.position
 	world.set_goal(p, safe.position)
-	_lair_msg.text = party.defeat_line(revived, fell, safe.sname, lost)
+	_after_night({"lines": Defeat.lose_time(world, party, _night_step)})
+	var hurt: Dictionary = Defeat.injure(party, downed, world.clock.elapsed)
+	_trait_news.append_array(hurt["lines"])
+	_queue_moments(hurt["moments"])
+	_lair_msg.text = party.defeat_line(revived, fell, safe.sname, lost, Defeat.DAYS_LOST)
 	return _lair_msg.text
+
+# The company is finished (core/defeat.gd): the whole roster died. The living
+# (there may be none) go to the barracks and the dead are kept out of it, the
+# slot is written one last time with its record, so the title screen lists it
+# as over and will not resume it, and the closing screen takes over. The same
+# process-global resets as leaving the map, so the next run starts as strangers.
+func _end_company() -> void:
+	if party.finished.is_empty():
+		return
+	Defeat.to_barracks(party)
+	_autosave()
+	FactionOpinion.reset()
+	Ladder.reset()
+	var host := get_parent()
+	if host != null and host.has_method("show_company_end"):
+		host.show_company_end(party.finished)
 
 # --- O6: settlement visit ----------------------------------------------
 # Same shape as _check_encounter above, against the settlement list instead of
@@ -2451,6 +2514,11 @@ func _check_lairs() -> void:
 func _check_expired_lairs() -> void:
 	if _combat != null or _site != null:
 		return
+	# The design audit §3.4: a bounty or a rescue past its day fails, and says
+	# so — a job quietly gone from the log reads as a bug, like a grey lair.
+	for title in Quest.expire(party, world.clock.elapsed):
+		_lair_msg.text = "Too late: %s. The job is gone, and the board may post it again." % title
+		_autosave()
 	for l in WorldLairs.expire(world, world.clock.elapsed):
 		_lair_msg.text = WorldLairs.resolution_text(l)
 		_autosave()
@@ -2820,7 +2888,16 @@ func _on_site_room_chosen(i: int) -> void:
 			if not _delve_haul.is_empty():
 				(_delve_haul["quests"] as Array).append(line)
 	if _site.state == "wiped":
-		_site_wiped(result.get("deaths", []))
+		_site_wiped(result.get("deaths", []), result.get("downed", []))
+		if not party.finished.is_empty():
+			# Nobody came out of the lair at all: the run ends here. The site
+			# screen goes first, so nothing of it outlives the map.
+			_site = null
+			if _site_screen != null:
+				_site_screen.queue_free()
+				_site_screen = null
+			_end_company()
+			return
 	elif not _site.is_over():
 		_site.leave()
 	_site_screen.refresh()
@@ -2845,9 +2922,9 @@ func _on_site_withdrew() -> void:
 # applied before this, the road's order too) and on top of it the bag is lightened and the lair
 # closes up again — see core/site.gd's wipe_penalty() for why it is the stash
 # and never the equipped gear.
-func _site_wiped(fell: Array = []) -> void:
+func _site_wiped(fell: Array = [], downed: Array = []) -> void:
 	var toll: Dictionary = Site.wipe_penalty(party, _site.lair)
-	var came_to: String = _retreat(fell)
+	var came_to: String = _retreat(fell, downed)
 	var names: Array = []
 	for item_id in toll.get("items", {}):
 		names.append("%s x%d" % [Campaign.item_name(String(item_id)), int(toll["items"][item_id])])
@@ -3777,7 +3854,7 @@ func _on_courtship_chosen(id: String, a: String, b: String, then: Callable) -> v
 # O9 item 4 / T9x quest board: `q` is the exact offer row the player clicked
 # (the board can show several at once now), not re-rolled here.
 func _take_quest(q: Dictionary) -> void:
-	if not Quest.accept(party, q):
+	if not Quest.accept(party, q, world.clock.elapsed):
 		_say("No work here just now.")
 		return
 	Sound.play_sfx("quest")
@@ -5028,7 +5105,7 @@ func _build_board_page(box: VBoxContainer, s) -> void:
 	for offer in _counter_offers(s).get("board", []):
 		_job_row(rows, offer)
 	for q in Visit.turn_ins(party):
-		_trade_row(rows, "✔ %s" % Quest.describe(q), "Turn in", _turn_in.bind(q))
+		_trade_row(rows, "✔ %s" % Quest.describe(q, world.clock.elapsed), "Turn in", _turn_in.bind(q))
 	if rows.get_child_count() == 0:
 		var none := Label.new()
 		none.text = ("Nothing posted right now." if has_inn
@@ -5130,7 +5207,9 @@ func _job_row(rows: VBoxContainer, offer: Dictionary) -> void:
 	_trade_row(rows, "%s%s" % [offer["title"], tag], "Take", _take_quest.bind(offer), false,
 		Icons.scene_art("quest-" + String(offer.get("kind", "")), null),
 		("For the %s · " % Ladder.people(who) if who != "" else "")
-		+ "Pays %d ◉" % int(offer.get("reward", {}).get("gold", 0)))
+		+ "Pays %d ◉" % int(offer.get("reward", {}).get("gold", 0))
+		# the audit's 3.4: a bounty or a rescue says how long it gives you, before it is taken
+		+ (" · %s" % Quest.time_left(offer, world.clock.elapsed) if int(offer.get("deadline_days", 0)) > 0 else ""))
 
 # Issue #33: the label wraps. Without that its minimum width is the whole
 # string, and a job with a long title pushed the row — and with it the counter,

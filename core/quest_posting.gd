@@ -78,6 +78,22 @@ const PLACEMENT := {
 	"scout_region": {"counters": ["generalist"], "kinds": ["town", "camp"], "reach": 0.0},
 }
 
+# --- deadlines (the design audit §3.4) -------------------------------------
+#
+# How many days a job gives you, from the day it is taken (core/quest.gd's
+# accept() turns it into a world-minute; expire() fails the job past it). Only
+# the two kinds the owner named: bounties — a price on a band (hunt_party) or
+# on so many heads (kill_count, the innkeeper's "Bounty: 4 of Kritch's
+# archers") — and rescues, where somebody is waiting. Errands and deliveries
+# stay open-ended, and so do the war work and the lairs, which have clocks of
+# their own (core/raids.gd, core/world_lairs.gd).
+# TUNING: taste numbers, not a sweep's. A captive has the fewest days; a band
+# moves, so its bounty gives a little longer; a head count longer still, since
+# the heads have to be found. Downtime's training takes 5 to 7 days
+# (core/downtime.gd), so a week in town costs a taken rescue — which is the
+# trade the audit asked for.
+const DEADLINE_DAYS := {"rescue": 3, "hunt_party": 4, "kill_count": 6}
+
 # --- supply_item: a counter is out of something --------------------------
 
 const SUPPLY_MIN_PRICE := 8      # below this it is not worth anyone's errand
@@ -177,6 +193,9 @@ static func offers(s, services: Array, party, world = null) -> Array:
 					continue
 				seen[id] = true
 				q["counter"] = counter
+				# q's own kind, not the loop's: the curated kinds share one offer
+				if DEADLINE_DAYS.has(String(q["kind"])):
+					q["deadline_days"] = int(DEADLINE_DAYS[String(q["kind"])])   # the posting says it; accept() starts the clock
 				Contracts.stamp(q, s.faction)
 				# Renown's premium, and this people's regard: a famous company
 				# charges more everywhere, a liked one here.

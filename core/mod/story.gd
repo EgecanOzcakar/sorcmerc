@@ -300,6 +300,11 @@ func _check_quest(q: Dictionary, where: String, quest_ids: Dictionary,
 		errors.append("%s: a collect_item quest needs target_item_id" % where)
 	if int(q.get("required", 1)) <= 0:
 		errors.append("%s: required must be 1 or more" % where)
+	# Optional (the design audit §3.4): days the quest gives from the day it is
+	# handed over; past them an unfinished quest fails and leaves the log.
+	if q.has("deadline_days") and not (q["deadline_days"] is float or q["deadline_days"] is int) \
+			or float(q.get("deadline_days", 1)) <= 0.0:
+		errors.append("%s: deadline_days must be a number of days, 1 or more" % where)
 	if q.get("reward") is Dictionary and q["reward"].has("item_id"):
 		_check_item(String(q["reward"]["item_id"]), where)
 	if kind == "collect_item":

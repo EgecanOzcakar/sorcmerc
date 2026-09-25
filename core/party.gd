@@ -82,6 +82,12 @@ var lodge: Dictionary = {}
 # pools too), plus which chairs were taken today. Owned entirely by
 # core/recruits.gd.
 var hiring: Dictionary = {}
+# The company is finished (core/defeat.gd): the whole roster died after a
+# defeat. {} for a run still going; otherwise Defeat.ending()'s record — who
+# fell, days lasted, the renown title, the roll. Saved at the top of the world
+# save as "finished" (core/world_save.gd), which is what stops the title
+# screen resuming the slot. An old save has none, so it is not finished.
+var finished: Dictionary = {}
 
 # --- roster ---------------------------------------------------------------
 
@@ -445,24 +451,18 @@ static func auto_revive_all(party) -> void:
 # living bench marches in their place (roster order, up to MAX_ACTIVE), so
 # the next fight has somebody in it.
 #
-# And if the WHOLE roster is dead, the company is finished — but the open world
-# has no run-ending screen to send it to (the linear run's Campaign.TERMINAL /
-# show_summary is the node route's alone), and a map with nobody alive on it is
-# a save that cannot be played or ended. So exactly one comes back: the
-# highest level of the fallen (roster order breaks ties, so the founder when it
-# is close), at 1 HP, marching alone. `spared` names them so the screen can say
-# it; everyone else stays dead.
-# ponytail: a lone survivor stands in for a game-over the open world does not
-# have. Revisit when the open world gets its own end-of-run summary (a wiped
-# company would end there, and its heroes go to the barracks as they are).
+# And if the WHOLE roster is dead, the company is finished (the owner's call,
+# 2026-09-25): nobody is stood up, `finished` says so, and the caller ends the
+# run (core/defeat.gd; scenes/world/world.gd's _end_company). Until then the
+# open world had no end screen, so the highest-level hero came to alone.
 #
 # `carried_out` is ids a fight put on the ground without killing them, dead
 # flag or not: the pit's lost bout (Downtime.pit_result), which is a brawl for
 # a purse, not a death match. They come to with the downed; nobody else's
 # death is undone by it.
 #
-# Returns {"came_to": [ids], "dead": [ids], "spared": id or ""}. Deterministic:
-# no roll, only the roster's own order and levels.
+# Returns {"came_to": [ids], "dead": [ids], "finished": bool}. Deterministic:
+# no roll, only the roster's own order.
 static func revive_downed(party, carried_out: Array = []) -> Dictionary:
 	var came_to: Array[String] = []
 	var dead: Array[String] = []
@@ -476,17 +476,7 @@ static func revive_downed(party, carried_out: Array = []) -> Dictionary:
 			ch.hp_current = 1
 			ch.dirty()
 			came_to.append(String(ch.id))
-	var spared := ""
-	if not party.roster.is_empty() and dead.size() == party.roster.size():
-		var best = party.roster[0]
-		for ch in party.roster:
-			if ch.level() > best.level():
-				best = ch
-		best.dead = false
-		best.hp_current = 1
-		best.dirty()
-		spared = String(best.id)
-		dead.erase(spared)
+	var finished: bool = not party.roster.is_empty() and dead.size() == party.roster.size()
 	var standing := false
 	for id in party.active:
 		var ch = party.get_member(id)
@@ -498,19 +488,18 @@ static func revive_downed(party, carried_out: Array = []) -> Dictionary:
 		for ch in party.roster:
 			if not ch.dead and not party.is_active(ch.id):
 				party.activate(ch.id)
-	return {"came_to": came_to, "dead": dead, "spared": spared}
+	return {"came_to": came_to, "dead": dead, "finished": finished}
 
 # The line a beaten company reads on the map, from revive_downed()'s answer
 # and the ids this fight killed. Here rather than in the screen so the words
 # and the rule are tested together: the dead are named, and the line says
-# what brings them back.
-func defeat_line(revived: Dictionary, fell: Array, where: String, lost: int) -> String:
-	var spared := String(revived.get("spared", ""))
-	if spared != "":
-		var ch = get_member(spared)
-		return "The company is beaten, and this time nearly all of it stays where it fell. %s comes to alone at %s, %d ◉ lighter. The rest come back only through a healer, at %d ◉ a head." % [
-			ch.cname if ch != null else spared, where, lost, REVIVE_COST]
-	var line := "The company is beaten and left for dead. The living come to at %s, %d ◉ lighter." % [where, lost]
+# what brings them back. `days` is how long they lay there first
+# (core/defeat.gd's DAYS_LOST; 0 for a caller that spends no time).
+func defeat_line(revived: Dictionary, fell: Array, where: String, lost: int, days := 0) -> String:
+	if bool(revived.get("finished", false)):
+		return "The company is beaten, and nobody gets up."
+	var later := "" if days <= 0 else (" a day later" if days == 1 else " %d days later" % days)
+	var line := "The company is beaten and left for dead. The living come to at %s%s, %d ◉ lighter." % [where, later, lost]
 	var names: Array = []
 	for id in fell:
 		var ch = get_member(String(id))

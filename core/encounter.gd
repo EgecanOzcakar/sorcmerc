@@ -782,6 +782,10 @@ static func build(spec: Dictionary, party_combatants: Array, board: Dictionary =
 	var cb := Combat.new(RNG.new(sd if sd > 0 else (int(Time.get_unix_time_from_system()) & 0xFFFFFF)),
 		all_c, b)
 	cb.purse = float(spec.get("purse", 1.0))
+	# The design audit §3.5: whether a hero may walk off the board's edge. The
+	# caller's to grant (world.gd's road fights); a breakout's way off the board
+	# is its objective, not a withdrawal.
+	cb.can_withdraw = bool(spec.get("withdraw", false)) and kind != "breakout"
 	if kind != "":
 		if kind in ["breakout", "hunt"]:
 			o["exit"] = exit
@@ -984,6 +988,15 @@ static func resolve_outcome(cb: Combat, party) -> Dictionary:
 		if cb.party != null:
 			PartyOpinion.fought_beside(cb.party, cb.team_of("party").filter(
 				func(c): return c.conscious() and c.sheet != null).map(func(c): return c.id))
+	# A withdrawal (the design audit §3.5) is neither a win nor a wipe: nothing
+	# is scored, and it pays nothing — no XP, no coin, no loot, and no kills to
+	# count towards a job. The dead it left on the field are still dead.
+	if res == cb.WITHDRAWN:
+		return {
+			"outcome": cb.WITHDRAWN, "xp": 0, "gold": 0, "loot": [], "deaths": deaths, "kills": [],
+			"downed": cb.downed.keys(), "credit": cb.credit.duplicate(true), "rounds": cb.round_num,
+			"objective": {"kind": cb.objective_kind(), "done": false, "xp": 0},
+		}
 	_score_fight(cb, res == "Victory")
 	# Spec §4: an objective done pays half the whole roster's worth in XP on
 	# top of the kills — dead or standing, because holding against them,

@@ -211,6 +211,7 @@ const FLOOR_ALPHA := 0.9    # the texture is the ground now, not a wash over a s
 const FLOOR_TONE := 0.72    # ...held down to the board's dark palette, the board light on top
 const COL_MOVE := Color(0.30, 0.55, 0.95, 0.35)
 const COL_EXIT := Color(0.85, 0.72, 0.30, 0.32)      # objectives: the road out / the treeline
+const COL_EDGE := Color(0.62, 0.70, 0.86, 0.20)      # the audit's 3.5: the edge a hero can walk off
 const COL_BYSTANDER := Color("d8cfae")               # objectives: a captive's or carter's token
 const COL_TARGET := Color(0.95, 0.35, 0.30, 0.9)
 const COL_CONE := Color(0.98, 0.55, 0.15, 0.30)
@@ -1579,7 +1580,7 @@ static func _verb_tooltip(h, v: Dictionary) -> String:
 # Two-press confirm on anything that burns a limited resource, plus the two
 # turn-enders that are easy to misclick.
 func _costly(v: Dictionary) -> bool:
-	return v.has("pool") or int(v.get("slot_level", 0)) > 0 or v["kind"] in ["dodge", "dash"]
+	return v.has("pool") or int(v.get("slot_level", 0)) > 0 or v["kind"] in ["dodge", "dash", "withdraw"]
 
 # A two-press guard: first press arms and relabels, second press fires. The
 # relabel lands on whatever page the first press came from — issue #24: arming
@@ -1861,7 +1862,8 @@ func _after_hero_action(h) -> void:
 	if cb.is_over():
 		_finish()
 		return
-	if h.econ["action"] <= 0 and h.econ["bonus"] <= 0 and h.econ["move_left"] <= 0:
+	# Walked off the edge (the audit's 3.5): nothing left for them to do here.
+	if h.has("withdrawn") or (h.econ["action"] <= 0 and h.econ["bonus"] <= 0 and h.econ["move_left"] <= 0):
 		_end_turn()
 	else:
 		_build_hero_menu(h)
@@ -2219,7 +2221,7 @@ func _build_order_strip() -> void:
 			who.theme_type_variation = "Dim"
 			who.add_theme_font_size_override("font_size", int(Icons.FS_SMALL * u))
 			tv.add_child(who)
-		if c.is_dead():
+		if c.is_dead() or c.has("withdrawn"):   # dead, or off the field (the audit's 3.5)
 			tile.modulate = Color(1, 1, 1, 0.35)
 		elif c.is_down():
 			tile.modulate = Color(1, 1, 1, 0.6)
@@ -2577,7 +2579,7 @@ func _draw_hud_overlay() -> void:
 	var s: float = hex_px
 	var fz := clampf(_zoom, 0.75, 1.7)
 	for c in cb.combatants:
-		if c.is_dead():
+		if c.is_dead() or c.has("withdrawn"):
 			continue
 		var p: Vector2 = _board._tok.get(c.id, _board._pix(c.pos)) + _board._lunge(c.id)
 		var rad := s * 0.62
@@ -3118,7 +3120,7 @@ class Board extends Control:
 		var pts: Array = []
 		for id in main._cam_ids:
 			var c = main._combatant(id)
-			if c != null and not c.is_dead():
+			if c != null and not c.is_dead() and not c.has("withdrawn"):
 				pts.append(_tok.get(id, _pix(c.pos)))
 		if pts.is_empty():
 			return
@@ -4035,6 +4037,13 @@ class Board extends Control:
 		var road := {}
 		for e in cb.objective.get("exit", []):
 			road[e] = true
+		# The design audit §3.5: where a hero can walk off the field, shown on a
+		# hero's turn in a fight that allows it — brighter under the hero who
+		# is standing on it, so "Leave the field" is never a hidden button.
+		var edge := {}
+		if hero_turn and cb.can_withdraw and cb.is_hero(cur):
+			for e in cb.edge_hexes():
+				edge[e] = true
 		# tiles: the ground itself is on _ground (see Ground); only what moves
 		# frame to frame is painted here, on top of it.
 		var night: bool = cb.is_night()
@@ -4056,6 +4065,9 @@ class Board extends Control:
 				draw_colored_polygon(poly, main.COL_MOVE)
 			if road.has(hx):
 				draw_colored_polygon(poly, main.COL_EXIT)
+			elif edge.has(hx):
+				draw_colored_polygon(poly, main.COL_EDGE if hx != cur.pos
+					else Color(main.COL_EDGE, 0.45 + 0.15 * pulse))
 			if cone_hexes.has(hx):
 				draw_colored_polygon(poly, main.COL_CONE)
 			if provoke.has(hx):
@@ -4104,7 +4116,8 @@ class Board extends Control:
 					draw_polyline(poly, Color(main.COL_TARGET.r, main.COL_TARGET.g, main.COL_TARGET.b, 0.30), 1.5, true)
 
 		# tokens, painted back-to-front so nearer ones overlap farther ones
-		var order: Array = cb.combatants.filter(func(c): return not c.is_dead())
+		# ...and not the ones who walked off the edge (the audit's 3.5): gone, not dead
+		var order: Array = cb.combatants.filter(func(c): return not c.is_dead() and not c.has("withdrawn"))
 		order.sort_custom(func(a, b): return _tok.get(a.id, _pix(a.pos)).y < _tok.get(b.id, _pix(b.pos)).y)
 		for c in order:
 			var p: Vector2 = _tok.get(c.id, _pix(c.pos)) + _lunge(c.id)
