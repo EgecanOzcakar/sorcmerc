@@ -76,6 +76,10 @@ var lodge: Dictionary = {}
 # pools too), plus which chairs were taken today. Owned entirely by
 # core/recruits.gd.
 var hiring: Dictionary = {}
+# The roll of the fallen — every merc this company has lost, oldest first:
+# [{id, name, level, class, species, where, by, day, at, told}]. Owned entirely
+# by core/fallen.gd (the design audit §2.1); [] for a save from before it.
+var fallen: Array = []
 
 # --- roster ---------------------------------------------------------------
 

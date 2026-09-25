@@ -16,6 +16,7 @@
 #   PartyOpinion.travel_bonus(party)               # -1 / 0 / +1 on every road check
 #   PartyOpinion.camp_moment(party, rng)           # a long rest's fireside beat, if one fires
 #   PartyOpinion.decay(party, dt_minutes)          # drift toward the pair's baseline
+#   PartyOpinion.mourn(party, dead, mourners, walked)   # a death (core/fallen.gd, audit 2.1)
 #
 # Three things decided here that shape everything else:
 #
@@ -63,6 +64,14 @@ const COURTSHIP_ACCEPTED := 15.0
 const CALLING_BOND := 15.0       # a calling completed, with the one who did the thing (core/callings.gd)
 const COURTSHIP_DECLINED := 10.0 # lowered: it is awkward around the fire for a while
 const BREAKUP := 20.0            # the extra drop when lovers fall out
+# A death (the design audit §2.1; the spike's "a lover's death is not an event
+# yet"). Taste, not a sweep, sized against the camp beats: two who lose the
+# same person draw together by a warming; the ones who loved the dead hold it
+# against whoever walked away from that fight, half a quarrel from a friend,
+# a whole one from a lover.
+const SHARED_GRIEF := 8.0
+const SURVIVOR_BLAME := 4.0
+const SURVIVOR_BLAME_LOVER := 8.0
 
 const DRIFT_PER_DAY := 1.0       # toward the pair's baseline; half FactionOpinion's — people are stickier
 const DAY := 1440.0              # world-minutes (core/faction_opinion.gd's DAY)
@@ -301,6 +310,23 @@ static func road_result(party, roller: String, ok: bool, kind: String) -> void:
 			adjust(party, roller, String(id), ROAD_PASS)
 		elif kind == "bad":
 			adjust(party, roller, String(id), -ROAD_FAIL)
+
+# `dead` has just died (core/fallen.gd, before it marks them). `mourners` are
+# the living who were close to them (close_to, read before anyone moved) and
+# `walked` who marched in that fight and came out of it. Every two mourners
+# warm to each other by SHARED_GRIEF — they lost the same person. Each mourner
+# cools by SURVIVOR_BLAME toward everyone who walked away and was not a mourner
+# too (SURVIVOR_BLAME_LOVER from the dead's lover): "you were there". The pair
+# with the dead is left as it was — the roster keeps the dead, so a raise gives
+# back a relationship that was never removed (the spike, §10).
+static func mourn(party, dead: String, mourners: Array, walked: Array) -> void:
+	for p in pairs(mourners):
+		adjust(party, p[0], p[1], SHARED_GRIEF)
+	for m in mourners:
+		var hurt := SURVIVOR_BLAME_LOVER if status(party, dead, String(m)) == "lovers" else SURVIVOR_BLAME
+		for w in walked:
+			if String(w) != String(m) and String(w) != dead and not w in mourners:
+				adjust(party, String(m), String(w), -hurt)
 
 # Slow drift toward the pair's baseline — not toward 0. Only recorded pairs
 # move; an unrecorded one is at baseline by definition. `dt` is world-minutes,
