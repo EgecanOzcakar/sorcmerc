@@ -30,6 +30,7 @@
 #     "callings": {"ilsa": {"id": "acolyte", "target_kind": "landmark", ...}}  // Callings.to_dict
 #     "downtime": {"trained": ["vera"], "pit": {"riverhold": {"week": 3, "beaten": 1}}}  // Downtime.to_dict
 #     "lodge": {"settlement_id": "riverhold", "rooms": ["strongroom"], "gold": 250, ...}  // Lodge.to_dict; {} until bought
+#     "fallen": [ <core/fallen.gd entries> ]  // Fallen.to_dict; [] = nobody lost yet
 #   }
 # }
 #
@@ -44,6 +45,7 @@ const PartyOpinion = preload("res://core/party_opinion.gd")
 const Callings = preload("res://core/callings.gd")
 const Downtime = preload("res://core/downtime.gd")
 const Lodge = preload("res://core/lodge.gd")
+const Fallen = preload("res://core/fallen.gd")
 
 const SaveDir = preload("res://core/save_dir.gd")
 const FORMAT := "sorcmerc-campaign"
@@ -91,6 +93,7 @@ static func to_dict(campaign) -> Dictionary:
 			"callings": Callings.to_dict(campaign.party),
 			"downtime": Downtime.to_dict(campaign.party),
 			"lodge": Lodge.to_dict(campaign.party),
+			"fallen": Fallen.to_dict(campaign.party),   # audit 2.1
 		},
 	}
 
@@ -114,6 +117,7 @@ static func from_dict(d: Dictionary):
 	Callings.from_dict(party, pd.get("callings", {}))
 	Downtime.from_dict(party, pd.get("downtime", {}))
 	Lodge.from_dict(party, pd.get("lodge", {}))
+	Fallen.from_dict(party, pd.get("fallen", []))   # an old save: nobody on the roll
 
 	var campaign := Campaign.new(party, int(d.get("seed", 1)))
 	campaign.stage = int(d.get("stage", 0))

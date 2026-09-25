@@ -587,7 +587,7 @@ Every hero's background hands them a **calling** — a personal quest pointed
 at something the live map holds (`core/callings.gd`: the acolyte's defiled
 shrine, the soldier's deserters, the sage's lost library under a lair), told
 once at the campfire, done on the road, paid in XP, an heirloom and a bond.
-The game ships sixteen, one per background. A pack can add or replace them:
+The game ships two or three for each of the sixteen backgrounds. A pack can add or replace them:
 
 ```json
 "callings": "callings.json"
@@ -608,7 +608,10 @@ The game ships sixteen, one per background. A pack can add or replace them:
 
 Keyed by background id, merged over the built-in table **by background**: a
 background the game already has is replaced, one it does not (a background
-your `backgrounds.json` overlay adds) is added. Each entry:
+your `backgrounds.json` overlay adds) is added. The game ships two or three
+pasts for each background and picks one per hero; a pack's entry for a
+background is *the* past for it, and the built-in alternatives for that
+background step aside while the pack is on. Each entry:
 
 | Key | Meaning |
 |---|---|

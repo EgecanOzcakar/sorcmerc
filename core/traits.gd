@@ -671,6 +671,11 @@ static func save_mode(c, cb, conds: Array) -> Dictionary:
 # "Watched a friend die" was asked 163 times before its chance of 50 and 69
 # after; it had been the second commonest hardship, every witness asked every
 # time (heroes die 14 times in 100 of the run's fights, a combat number).
+# Since 2026-09-25 (the design audit §2.1) a witness who was close to the dead
+# is asked grief instead (grieve(), below, from core/fallen.gd) — guaranteed
+# and harder. The sweep passes no "grieving" and its preset trio holds no
+# bonds, so the table above is what it measured and still describes; how
+# often grief lands on a company with bonds in it is not measured.
 #
 # The same sweep's 30-day run (20 runs: a road fight a day at easy, a lair
 # every fourth day of two normal rooms and a hard boss room, no inn) gains
@@ -747,16 +752,9 @@ static func flag(ch_or_c, key: String):
 # Take a trait: {} when it is already held, the data has no such row, or its
 # family is full. A lapsing one (Emboldened, a wound) carries `until`.
 static func grant(ch, id: String, why: String, now: float, extra := {}) -> Dictionary:
+	if row(id).is_empty() or has(ch, id) or refusal(ch, id) != "":
+		return {}
 	var r := row(id)
-	if r.is_empty() or has(ch, id):
-		return {}
-	var fam := String(r.get("family", ""))
-	if (fam == "bane" and _count_family(ch, "bane") >= BANE_CAP) \
-			or (fam == "wound" and _count_family(ch, "wound") >= WOUND_CAP):
-		return {}
-	var kind := String(r.get("kind", ""))
-	if kind in ["triumph", "resilience", "scar"] and _count_kind(ch, kind) >= KIND_CAP:
-		return {}
 	var t := {"id": id, "why": why, "since": now}
 	var days := float(r.get("lasts_days", 0))
 	if id == "shaken" and has(ch, "calm"):
@@ -766,6 +764,33 @@ static func grant(ch, id: String, why: String, now: float, extra := {}) -> Dicti
 	t.merge(extra)
 	ch.traits.append(t)
 	return t
+
+
+# Why grant() would turn this trait down for a family or kind that is full —
+# "" when there is room. The caps, said in words, so a page that shows progress
+# toward a bane or Veteran (core/service.gd) reads the same rule grant() obeys
+# rather than a copy of it. Holding the trait already is not a refusal here;
+# the caller asks has() for that.
+static func refusal(ch, id: String) -> String:
+	var r := row(id)
+	var fam := String(r.get("family", ""))
+	if fam == "bane" and _count_family(ch, "bane") >= BANE_CAP:
+		return "already known for %s banes" % ("two" if BANE_CAP == 2 else str(BANE_CAP))
+	if fam == "wound" and _count_family(ch, "wound") >= WOUND_CAP:
+		return "carrying as many wounds as they can"
+	var kind := String(r.get("kind", ""))
+	if kind in ["triumph", "resilience", "scar"] and _count_kind(ch, kind) >= KIND_CAP:
+		return "already holding %d %ss" % [KIND_CAP, kind]
+	return ""
+
+
+# The stored dict of a held trait — {"id", "why", "since"?, ...} — or {} when
+# the hero does not hold it. A page reads "why" and "since" off it.
+static func entry(ch, id: String) -> Dictionary:
+	for t in ch.traits:
+		if t is Dictionary and String(t.get("id", "")) == id:
+			return t
+	return {}
 
 
 # For a page: what would mend a scar or a wound, and how long a lapsing one
@@ -862,7 +887,8 @@ static func _save_words(sv: Dictionary) -> String:
 
 # After a fight, win or lose: `chars` the heroes who were in it, `result`
 # Encounter.resolve_outcome's, `ctx` {"now": world minutes, "difficulty":
-# the roster's, "site"}. Changes the heroes' traits and counts, and returns
+# the roster's, "site", "grieving": ids close to one of this fight's dead}.
+# Changes the heroes' traits and counts, and returns
 # {"moments": [trait_moment dicts], "lines": [one line each, for the page]}.
 # At most one triumph and one hardship per hero per fight, the first that
 # applies in the order below — a fight is one story per person, not four.
@@ -876,6 +902,11 @@ static func after_fight(chars: Array, result: Dictionary, ctx: Dictionary) -> Di
 	var alive: Array = chars.filter(func(ch): return ch != null and not ch.dead and not ch.id in dead)
 	var boss := _boss(kills, _avg_level(chars))
 	var triumphed := {}
+	# The service record (core/service.gd): every fight each of them was in,
+	# the ones who died in it included — it was their fight too.
+	for ch in chars:
+		if ch != null:
+			bump(ch, "fights")
 	# Counted, not rolled: a bane, Veteran.
 	for ch in alive:
 		var cr: Dictionary = credit.get(ch.id, {})
@@ -912,9 +943,14 @@ static func after_fight(chars: Array, result: Dictionary, ctx: Dictionary) -> Di
 				_triumph(out, ch, ev, now)
 		for ch in alive:
 			_cures(out, ch, kills, now)
+	# Who was close to someone this fight killed (the caller reads the party's
+	# bonds, PartyOpinion.close_to, before the deaths are applied): their grief
+	# is core/fallen.gd's to roll, guaranteed and harder, so the witness's
+	# fifty-fifty is not asked of them on top of it.
+	var grieving: Array = ctx.get("grieving", [])
 	for ch in alive:
 		var cr: Dictionary = credit.get(ch.id, {})
-		var hit := _hardship_for(ch, cr, dead, credit, boss)
+		var hit := _hardship_for(ch, cr, dead if not ch.id in grieving else [], credit, boss)
 		var scarred := false
 		if not hit.is_empty():
 			scarred = _hardship(out, ch, hit, now)
@@ -933,6 +969,32 @@ static func after_lair(chars: Array, now: float) -> Dictionary:
 	for ch in chars:
 		if ch != null and not ch.dead:
 			_triumph(out, ch, "lair_cleared", now)
+	return out
+
+
+# Grief (the design audit, docs/audit-game-design.md §2.1): `ch` was bonded to
+# or in love with `dead` (PartyOpinion.close_to), who has just died. Unlike
+# the witness's "Watched a friend die" it is not asked on chance — it is always
+# asked — and it is harder: the witness's DC off whatever did it, plus
+# GRIEF_BONDED, or GRIEF_LOVER for a lover, capped at DC_MAX like every other.
+# Made well, they are Hardened; failed, Grieving (a wound that lapses in seven
+# days), and failed badly Shaken on top. The hero need not have been in the
+# fight: a friend on the bench loses them just the same. Seeded off the
+# griever, the dead and the minute, so a reload cannot take it back. `by` is
+# what killed them (a monster id, or "" when nothing is credited). Returns
+# {"moments", "lines"} in after_fight's shape; core/fallen.gd calls it.
+# TUNING: taste, not a sweep — one and two aggravations, so a lover's death
+# is as hard to carry as a boss that also made you fail a death save.
+const GRIEF_BONDED := 2
+const GRIEF_LOVER := 4
+
+static func grieve(ch, dead, lover: bool, by: String, now: float) -> Dictionary:
+	var out := {"moments": [], "lines": []}
+	if ch == null or ch.dead or dead == null:
+		return out
+	var dc := maxi(DC_MIN, DC_MIN + int(floor(_cr(by) / 2.0))) + (GRIEF_LOVER if lover else GRIEF_BONDED)
+	_hardship(out, ch, {"event": "bonded_died", "by": by, "dc": mini(DC_MAX, dc),
+		"label": "Lost %s" % dead.cname, "seed": dead.id}, now)
 	return out
 
 
@@ -1029,12 +1091,14 @@ static func _hardship(out: Dictionary, ch, hit: Dictionary, now: float) -> bool:
 	# asked every time). Seeded apart from the save, so the two never correlate.
 	if ev.has("chance") and RNG.new(_seed("asks|%s|%s|%d" % [ch.id, ev_id, int(now)])).roll_die(100) > int(ev["chance"]):
 		return false
-	var sv := _save_roll(ch, ev, int(hit["dc"]), "trait|%s|%s|%d" % [ch.id, ev_id, int(now)])
+	# `seed`: grief names who died, so losing two friends in one fight is two saves.
+	var who := ("|" + String(hit["seed"])) if hit.has("seed") else ""
+	var sv := _save_roll(ch, ev, int(hit["dc"]), "trait|%s|%s|%d%s" % [ch.id, ev_id, int(now), who])
 	var margin := int(sv["nat"]) + int(sv["bonus"]) - int(sv["dc"])
 	var f := String(hit.get("faction", ""))
 	var suffix := ("@" + f) if f != "" else ""
-	var label := String(ev.get("label", ""))
-	if _monster_name(String(hit["by"])) != "":
+	var label := String(hit.get("label", ev.get("label", "")))
+	if not hit.has("label") and _monster_name(String(hit["by"])) != "":
 		label += " — " + _monster_name(String(hit["by"]))
 	var res := String(ev.get("resilience", "")) + suffix
 	var scar := String(ev.get("scar", "")) + suffix
