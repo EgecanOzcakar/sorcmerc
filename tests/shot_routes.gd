@@ -5,10 +5,11 @@
 #
 # What it draws, back to front: the four rings (core/regions.gd), the water,
 # then the network — roads thick and brown, tracks to the lairs thinner and
-# red-brown, hidden paths to the landmarks pale and dashed, hidden byways
-# dotted blue, trails an outcome opened green — and the places on top: settlements as white squares (orc holds
-# orange), lairs as red diamonds, landmarks as blue dots, forks as small dark
-# dots. No labels: an Image has no text, and the doc names what matters.
+# red-brown, paths to the landmarks pale, byways dotted blue, trails an outcome
+# opened green, and anything still hidden dashed — and the places on top:
+# settlements as white squares (orc holds orange), lairs as red diamonds,
+# landmarks as blue dots (green if an outcome put them there), forks as small
+# dark dots. No labels: an Image has no text, and the doc names what matters.
 extends SceneTree
 
 const WorldRoutes = preload("res://core/world_routes.gd")
@@ -85,7 +86,8 @@ func _shot(w, name: String, net = null) -> void:
 				continue
 			var pts: PackedVector2Array = e["points"]
 			for i in range(1, pts.size()):
-				_line(_px(pts[i - 1]), _px(pts[i]), INK[kind], WIDTH[kind], kind)
+				var style := "dot" if kind == "byway" else ("dash" if not e["known"] else "")
+				_line(_px(pts[i - 1]), _px(pts[i]), INK[kind], WIDTH[kind], style)
 	for id in net.nodes:
 		var n: Dictionary = net.nodes[id]
 		var p := _px(n["position"])
@@ -120,17 +122,17 @@ func _diamond(c: Vector2, r: int, ink: Color) -> void:
 		var half := r - absi(dy)
 		_img.fill_rect(Rect2i(int(c.x) - half, int(c.y) + dy, 2 * half + 1, 1), ink)
 
-# A thick line as a run of squares; a hidden tier is broken into dashes
-# (paths) or dots (byways) so hidden reads as hidden without a legend.
-func _line(a: Vector2, b: Vector2, ink: Color, width: int, kind: String) -> void:
+# A thick line as a run of squares; anything hidden is broken into dashes, and
+# a byway into dots, so hidden reads as hidden without a legend.
+func _line(a: Vector2, b: Vector2, ink: Color, width: int, style: String) -> void:
 	var span := a.distance_to(b)
 	var steps := maxi(1, int(span))
 	for i in steps + 1:
 		var t := float(i) / steps
 		var along := t * span
-		if kind == "path" and fmod(along, 12.0) > 7.0:
+		if style == "dash" and fmod(along, 12.0) > 7.0:
 			continue
-		if kind == "byway" and fmod(along, 8.0) > 3.0:
+		if style == "dot" and fmod(along, 8.0) > 3.0:
 			continue
 		var p := a.lerp(b, t)
 		var h := width / 2

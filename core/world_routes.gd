@@ -30,15 +30,22 @@
 #     for a loop to be the short way round, it never crosses itself, and it
 #     contains the minimum spanning tree, so it is connected by construction.
 #
-#  2. TRACKS, known from the start, to the lairs — the other "obvious" places
-#     the issue names. Built first as a neighbourhood graph over towns AND
+#  2. TRACKS, hidden, to the lairs. The issue first named lairs among the
+#     obvious places; the owner's call (2026-09-25) is that a lair stays hidden
+#     the way it is today, found by the Survival check (core/world_lairs.gd),
+#     so its track is a `search` edge: walking past the fork does not show it,
+#     a search from there does (searchable() / reveal()). A lair already found
+#     (Lair.discovered) is on the map with its track from the start. The
+#     geometry was first built as a neighbourhood graph over towns AND
 #     lairs, which put a lair on the only road between two towns (Riverhold to
 #     Greenmarch ran past the goblin warren's door on every trip) and left the
 #     small map two town-to-town roads out of eleven edges. A lair is where you
 #     go on purpose, so each now hangs off the network as a spur leaving at a
 #     FORK, a node cut into the road at the point nearest it. What a lair does
-#     to the roads near it is core/route_encounters.gd's business (its lure),
-#     not the geometry's.
+#     to the roads near it is core/route_encounters.gd's business (its lure —
+#     which a hidden lair casts too: a road that keeps turning up gnolls is
+#     how a company learns there is something out there to search for), not
+#     the geometry's.
 #
 #  3. PATHS, hidden, to the landmarks. A landmark is not a place anybody builds
 #     a road to; it is something a company notices off the one it is on. It
@@ -46,9 +53,8 @@
 #     the company walks past the fork (notice()) — "available while taking the
 #     route, and showing themselves as we did in landmarks", as the issue puts
 #     it. The two landmark kinds that are hidden today (Landmarks.HIDDEN: the
-#     hut, the tower) keep that: their path has `search` set and is only found
-#     by a check (reveal()), which phase 1 wires to the same Survival roll the
-#     lairs use now.
+#     hut, the tower) keep that: their path has `search` set like a lair's
+#     track, found by the same Survival roll.
 #
 #     Spurs hang Prim-style: of everything still to hang, the one nearest the
 #     network as it now stands goes first, so a landmark past another hangs off
@@ -131,7 +137,7 @@ static func build(world):
 	net._neighbourhood(world, towns)
 	net._join_components(world, towns)
 	for l in world.lairs:
-		net._add_node(poi_id("lair", l.id), "lair", l.id, l.position, true)
+		net._add_node(poi_id("lair", l.id), "lair", l.id, l.position, l.discovered)
 	net._attach_all(world, world.lairs.map(func(l): return poi_id("lair", l.id)))
 	for m in world.landmarks:
 		net._add_node(poi_id("landmark", m.id), "landmark", m.id, m.position, m.found)
@@ -279,8 +285,9 @@ func _attach_all(world, pending: Array) -> void:
 		_hang(world, pick, pick_at)
 
 # A place added after build() — a lair a raid seeded, a landmark a story put
-# down. Hung off the network the way a landmark is; a lair's track is known
-# (a lair is one of the obvious places), anything else's path is not.
+# down. Hung off the network the way the builder hangs one: `known` is whether
+# the place (and its spur) is on the map already, and a lair's track or a
+# hidden landmark kind's path is a search either way.
 func attach(world, kind: String, ref: String, pos: Vector2, known: bool) -> String:
 	var id := poi_id(kind, ref)
 	if nodes.has(id):
@@ -352,7 +359,7 @@ func _hang(world, id: String, at: Dictionary) -> void:
 		hub = _split(e, int(at["seg"]), at["point"])
 	var kind: String = nodes[id]["kind"]
 	var known: bool = nodes[id]["known"]
-	var search := kind == "landmark" and Landmarks.is_hidden(_landmark_kind(id))
+	var search := kind == "lair" or (kind == "landmark" and Landmarks.is_hidden(_landmark_kind(id)))
 	# A fork cut into a hidden path is itself hidden until that path is (_split
 	# gives it the edge's own `known`), so a chain of paths is found one at a time.
 	_connect(world, hub, id, "track" if kind == "lair" else "path", known, [hub], search)

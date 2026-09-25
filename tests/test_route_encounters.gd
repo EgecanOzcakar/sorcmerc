@@ -9,6 +9,7 @@ const WorldBands = preload("res://core/world_bands.gd")
 const RouteEncounters = preload("res://core/route_encounters.gd")
 const Regions = preload("res://core/regions.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const Grudges = preload("res://core/grudges.gd")
 
 var _pass := 0
 var _fail := 0
@@ -157,12 +158,77 @@ func _compose() -> void:
 	check(not w.parties.has(b), "band: not put on the map")
 	FactionOpinion.reset()
 
+func _grudge() -> void:
+	FactionOpinion.reset()
+	Grudges.reset()
+	var w := _world()
+	var home := Vector2(0, 900)          # heartland: goblins' country
+	var away := Vector2(0, 2300)         # the deeps: not theirs
+	var calm := RouteEncounters.rate(w, home)
+	Grudges.set_grudge("goblinoid", 80.0)
+	var f: Dictionary = RouteEncounters.factors(w, home)
+	check(is_equal_approx(float(f["grudge"].get("goblinoid", 0.0)), RouteEncounters.GRUDGE_HUNT * 0.8), "grudge: comes looking in its own country")
+	check(RouteEncounters.rate(w, home) > calm, "grudge: the road is busier for it")
+	check(not RouteEncounters.factors(w, away)["grudge"].has("goblinoid"), "grudge: not where it does not live")
+	var cands := RouteEncounters.candidates(w, home)
+	check(not cands.filter(func(c): return c["source"] == "grudge" and c["faction"] == "goblinoid").is_empty(), "grudge: a candidate of its own")
+	check(is_equal_approx(_sum(cands), float(f["rate"])), "grudge: still sums to the rate")
+	# Near one of its lairs it reaches out of its own country, by the lair's pull.
+	w.add_lair(World.Lair.new("warren", Vector2(0, 2300), "goblinoid"))
+	check(float(RouteEncounters.factors(w, Vector2(0, 2290))["grudge"].get("goblinoid", 0.0)) > 0.7, "grudge: and next to its lair, wherever that is")
+	# Heavier bands: one more heavy per GRUDGE_HEAVY, two at most.
+	var rng = load("res://core/rng.gd").new(3)
+	var plain := RouteEncounters.compose(w, home, {"faction": "goblinoid", "source": "country"}, rng, "g0")
+	var row: Array = WorldBands.KINDS.filter(func(k): return k["id"] == plain["kind"])[0]["roles"]
+	var angry := RouteEncounters.compose(w, home, {"faction": "goblinoid", "source": "grudge"}, rng, "g1")
+	var angry_row: Array = WorldBands.KINDS.filter(func(k): return k["id"] == angry["kind"])[0]["roles"]
+	check(plain["troops"].size() == row.size(), "grudge: the country sends the plain row")
+	check(angry["troops"].size() == angry_row.size() + 2 and angry["hostile"], "grudge: 80 points sends two more heavies")
+	Grudges.set_grudge("goblinoid", 45.0)
+	var cross := RouteEncounters.compose(w, home, {"faction": "goblinoid", "source": "grudge"}, rng, "g2")
+	var cross_row: Array = WorldBands.KINDS.filter(func(k): return k["id"] == cross["kind"])[0]["roles"]
+	check(cross["troops"].size() == cross_row.size() + 1, "grudge: 45 points, one more")
+	Grudges.reset()
+
+func _meetings() -> void:
+	FactionOpinion.reset()
+	Grudges.reset()
+	var w := _world()
+	var gate := Vector2(0, 20)
+	var cands := RouteEncounters.meet_candidates(w, gate)
+	var sources := cands.map(func(c): return "%s|%s" % [c["faction"], c["source"]])
+	check(sources == ["human|caravan", "human|patrol"], "meet: a town's patrol and caravans (%s)" % [sources])
+	check(RouteEncounters.meet_rate(w, gate) > 0.9 * RouteEncounters.MEET, "meet: all of MEET at the gate")
+	check(is_equal_approx(RouteEncounters.meet_rate(w, Vector2(0, 900)), 0.0), "meet: nobody out past MEET_RADIUS")
+	# Apart from the threat stream: the fight odds do not move for it.
+	check(is_equal_approx(RouteEncounters.rate(w, gate), float(RouteEncounters.factors(w, gate)["rate"])), "meet: the threat rate is its own")
+	var fired := 0
+	var n := 3000
+	var spec := {}
+	for k in n:
+		var m := RouteEncounters.meet(w, gate, "m|%d" % k)
+		if not m.is_empty():
+			fired += 1
+			spec = m
+	var expect: float = (1.0 - exp(-RouteEncounters.meet_rate(w, gate) * RouteEncounters.STEP / 1000.0)) * n
+	check(absf(fired - expect) < 4.0 * sqrt(expect), "meet: %d met, %.0f expected" % [fired, expect])
+	check(not spec.is_empty() and not spec["hostile"] and spec["faction"] == "human", "meet: a friendly human party")
+	check(spec["kind"] in ["human-patrol", "caravan"], "meet: a patrol or a caravan (%s)" % spec["kind"])
+	check(JSON.stringify(RouteEncounters.meet(w, gate, "m|7")) == JSON.stringify(RouteEncounters.meet(w, gate, "m|7")), "meet: the same key, the same meeting")
+	# A people hostile to the company does not stop to talk: it hunts instead.
+	FactionOpinion.set_opinion("human", FactionOpinion.HOSTILE)
+	check(RouteEncounters.meet_candidates(w, gate).is_empty(), "meet: none from a hostile people")
+	FactionOpinion.reset()
+
 func _init() -> void:
 	_rings()
 	_cover()
 	_lure()
 	_rolls()
 	_compose()
+	_grudge()
+	_meetings()
 	FactionOpinion.reset()
+	Grudges.reset()
 	print("test_route_encounters: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

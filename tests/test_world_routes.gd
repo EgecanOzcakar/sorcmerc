@@ -20,25 +20,28 @@ func check(cond: bool, label: String) -> void:
 func _shipped(w, name: String) -> void:
 	var net = WorldRoutes.build(w)
 	var pid := func(kind, id): return WorldRoutes.poi_id(kind, id)
-	# Every place is a node, where the place is, and known exactly when the
-	# issue says it is obvious.
+	# Every place is a node, where the place is: the towns known, a lair or a
+	# landmark known only once it has been found (the owner's call: lairs stay
+	# hidden the way they are today).
 	for s in w.settlements:
 		var n: Dictionary = net.nodes.get(pid.call("settlement", s.id), {})
 		check(not n.is_empty() and n["position"] == s.position and n["known"], "%s: %s is a known node" % [name, s.id])
 	for l in w.lairs:
 		var n: Dictionary = net.nodes.get(pid.call("lair", l.id), {})
-		check(not n.is_empty() and n["position"] == l.position and n["known"], "%s: lair %s is a known node" % [name, l.id])
+		check(not n.is_empty() and n["position"] == l.position and n["known"] == l.discovered, "%s: lair %s is a node, hidden until found" % [name, l.id])
 	for m in w.landmarks:
 		var n: Dictionary = net.nodes.get(pid.call("landmark", m.id), {})
 		check(not n.is_empty() and n["known"] == m.found, "%s: landmark %s is a node, hidden until found" % [name, m.id])
-	# The known roads join every town and every lair; every edge together
-	# reaches every landmark too.
+	# The known roads join every town; every edge together reaches every lair
+	# and every landmark too.
 	var home: String = pid.call("settlement", w.settlements[0].id)
 	var known: Array = net.reachable(home)
 	for s in w.settlements:
 		check(known.has(pid.call("settlement", s.id)), "%s: %s reachable on known roads" % [name, s.id])
 	for l in w.lairs:
-		check(known.has(pid.call("lair", l.id)), "%s: %s reachable on known roads" % [name, l.id])
+		var id: String = pid.call("lair", l.id)
+		check(known.has(id) == l.discovered, "%s: %s reachable on known roads only once found" % [name, l.id])
+		check(not net.path(home, id, false).is_empty(), "%s: %s hangs off the network" % [name, l.id])
 	for m in w.landmarks:
 		var id: String = pid.call("landmark", m.id)
 		check(not known.has(id), "%s: %s not reachable before it is found" % [name, m.id])
@@ -55,7 +58,8 @@ func _shipped(w, name: String) -> void:
 				check(ka in ["settlement", "fork"] and kb in ["settlement", "fork"], "%s: road %s joins towns" % [name, eid])
 				check(e["known"], "%s: road %s is known" % [name, eid])
 			"track":
-				check(e["known"], "%s: track %s is known" % [name, eid])
+				check(e["search"], "%s: track %s is found by a search" % [name, eid])
+				check(not (e["notice"] as Array).is_empty(), "%s: %s is searched for from somewhere" % [name, eid])
 			"path", "byway":
 				check(not e["known"], "%s: %s %s starts hidden" % [name, e["kind"], eid])
 				check(not (e["notice"] as Array).is_empty(), "%s: %s is noticed from somewhere" % [name, eid])
@@ -88,7 +92,8 @@ func _shipped(w, name: String) -> void:
 	var back = WorldRoutes.from_dict(JSON.parse_string(JSON.stringify(net.to_dict())))
 	check(JSON.stringify(back.to_dict()) == JSON.stringify(net.to_dict()), "%s: survives a JSON round trip" % name)
 	var far: String = pid.call("lair", w.lairs[-1].id)
-	check(is_equal_approx(float(back.path(home, far)["length"]), float(net.path(home, far)["length"])), "%s: a reloaded network walks the same" % name)
+	var there: Dictionary = net.path(home, far, false)
+	check(not there.is_empty() and is_equal_approx(float(back.path(home, far, false).get("length", -1.0)), float(there["length"])), "%s: a reloaded network walks the same" % name)
 
 func _crossings(e: Dictionary, f: Dictionary) -> int:
 	var p: PackedVector2Array = e["points"]
@@ -155,12 +160,17 @@ func _spurs_and_forks() -> void:
 	w.add_landmark(World.Landmark.new("landmark-hut-2", "hut", Vector2(800, -200)))
 	var net = WorldRoutes.build(w)
 	var den: Dictionary = net.node_for("lair", "den")
-	check(den["known"], "spurs: the lair is known")
+	check(not den["known"], "spurs: the lair is hidden")
 	var track: Array = net.edges.values().filter(func(e): return e["kind"] == "track")
 	check(track.size() == 1, "spurs: one track")
 	var fork: String = track[0]["a"] if track[0]["b"] == "lair:den" else track[0]["b"]
 	check(net.nodes[fork]["kind"] == "fork" and is_equal_approx(net.nodes[fork]["position"].x, 500.0), "spurs: the track leaves from a fork at x=500 (%s)" % fork)
-	check(not net.path("settlement:a", "lair:den").is_empty(), "spurs: the lair is walkable at once")
+	check(net.path("settlement:a", "lair:den").is_empty(), "spurs: no known way to the lair yet")
+	var den_fork: Vector2 = net.nodes[fork]["position"]
+	check(not net.notice(den_fork).has(track[0]["id"]), "spurs: walking past the fork does not find the lair")
+	check(net.searchable(den_fork) == [track[0]["id"]], "spurs: a search at the fork could")
+	check(net.reveal(track[0]["id"]) and den["known"], "spurs: the search finds it")
+	check(not net.path("settlement:a", "lair:den").is_empty(), "spurs: and the lair is walkable")
 	var stones := WorldRoutes.edge_id("settlement:a", "landmark:landmark-stones-1")
 	check(net.edges.has(stones), "spurs: a landmark by the gate hangs from the town")
 	var ruins_edge := ""
@@ -251,8 +261,8 @@ func _trails() -> void:
 	var net = WorldRoutes.build(w)
 	var built: String = JSON.stringify(net.to_dict())
 	var ruins := "landmark:landmark-ruins-0"
-	var before: float = net.path("settlement:w", "lair:den")["length"]
-	check(not net.nodes[ruins]["known"], "trails: the ruins start hidden")
+	var before: float = net.path("settlement:w", "lair:den", false)["length"]
+	check(not net.nodes[ruins]["known"] and not net.nodes["lair:den"]["known"], "trails: the ruins and the den start hidden")
 	var laid: Array = net.open_route(w, ruins, "lair:den", "landmark:%s" % ruins)
 	check(laid.size() == 2, "trails: crossing the road lays two pieces (%d)" % laid.size())
 	for eid in laid:
@@ -264,14 +274,14 @@ func _trails() -> void:
 			cross = n
 	check(cross != "" and net.nodes[cross]["position"].distance_to(Vector2(500, 0)) < 1.0, "trails: a crossroads where it meets the road")
 	check(net.neighbours(cross).size() == 4, "trails: four ways out of the crossroads (%d)" % net.neighbours(cross).size())
-	check(net.nodes[ruins]["known"], "trails: the place a trail was opened from is known")
+	check(net.nodes[ruins]["known"] and net.nodes["lair:den"]["known"], "trails: a trail shown at once shows both its ends")
 	var ids: Array = net.edges.keys()
 	var crossings := 0
 	for i in ids.size():
 		for j in range(i + 1, ids.size()):
 			crossings += _crossings(net.edges[ids[i]], net.edges[ids[j]])
 	check(crossings == 0, "trails: still nothing crosses without a node (%d)" % crossings)
-	var after: float = net.path("settlement:w", "lair:den")["length"]
+	var after: float = net.path("settlement:w", "lair:den", false)["length"]
 	check(after < before - 100.0, "trails: the lair is nearer by the crossroads (%.0f -> %.0f)" % [before, after])
 	check(net.stats()["trail"] == 2, "trails: counted as trails")
 	var again: Array = net.open_route(w, cross, "lair:den")

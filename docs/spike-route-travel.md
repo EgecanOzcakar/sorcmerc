@@ -2,14 +2,16 @@
 
 2026-09-25. A feasibility spike, not a feature: **nothing in the shipped game
 reads any of this yet.** What exists on the branch is the network
-(`core/world_routes.gd`), the encounter odds (`core/route_encounters.gd`), a
-headless test of each (`tests/test_world_routes.gd`,
-`tests/test_route_encounters.gd`), a sweep that measures today's free-roaming
+(`core/world_routes.gd`), the encounter odds (`core/route_encounters.gd`),
+the monster peoples' grudge (`core/grudges.gd`), a headless test of each
+(`tests/test_world_routes.gd`, `tests/test_route_encounters.gd`,
+`tests/test_grudges.gd`), a sweep that measures today's free-roaming
 map so the new odds start from the density the game already has
 (`tests/sweep_route_travel.gd`), and a picture of the network on each shipped
 map, plus the small map after play has opened trails on it
 (`tests/shot_routes.gd` → `docs/shots/route-network-*.png`). §6 is the
-order the rest lands in; §7 is what the owner still has to decide.
+order the rest lands in; §7 is what the owner decided on 2026-09-25, and what
+that changed here.
 
 ## 1. What #231 asks
 
@@ -19,7 +21,9 @@ Four things, in the issue's own order:
 2. **Distinct, determined paths between the points of interest.** Some
    obvious from the start — settlements and lairs — and some that "will be
    available while taking the route and show themselves as we did in
-   landmarks".
+   landmarks". (Lairs: the owner's later call is that they stay hidden the
+   way they are today, §7.) A follow-up: landmarks and decisions can also
+   **create** routes that were never on the map (§3.1).
 3. **Enemy parties stop spawning, and stop showing on the map.**
 4. **What you meet is decided by where you are**: the area, the faction you
    are close to, and the opinion of all factions toward the company shape the
@@ -66,7 +70,8 @@ keeps doing what it does.
 
 ## 3. The network — `core/world_routes.gd`
 
-Four tiers, each from a rule rather than by hand, so every map the game
+Four tiers built from a rule rather than by hand (a fifth, §3.1, is laid in
+play), so every map the game
 builds — the two hand-placed ones, every procedural seed, and a pack's — gets
 one:
 
@@ -76,15 +81,18 @@ one:
    towns by road: sparse, never crossing itself, loops only where a loop is
    the short way round, and connected by construction (it contains the
    minimum spanning tree).
-2. **Tracks**, known, to the lairs. Each hangs off the network at a **fork**
-   cut into the road nearest it. (The first cut built one neighbourhood graph
-   over towns *and* lairs, which put the goblin warren on the only road from
-   Riverhold to Greenmarch and left the small map two town roads out of
-   eleven edges. A lair is somewhere you go on purpose.)
+2. **Tracks**, hidden, to the lairs. Each hangs off the network at a **fork**
+   cut into the road nearest it, and — the owner's call, §7 — stays hidden the
+   way a lair is today: walking past the fork does not show it; the Survival
+   check, made at the fork, does (`searchable()` / `reveal()`). A lair
+   already found starts on the map with its track. (The first cut built one
+   neighbourhood graph over towns *and* lairs, which put the goblin warren on
+   the only road from Riverhold to Greenmarch and left the small map two town
+   roads out of eleven edges. A lair is somewhere you go on purpose.)
 3. **Paths**, hidden, to the landmarks, hung the same way. Walking past the
    fork reveals the path and the place at its end (`notice()`). The hut and
-   the tower — hidden today — keep that: their path is only found by a check
-   (`searchable()` / `reveal()`), the Survival roll the lairs use now.
+   the tower — hidden today — keep that: their path is found like a lair's
+   track, by the Survival check.
 4. **Byways**, hidden: a straight dry shortcut between two places the network
    otherwise makes you walk at least 1.8× the crow's distance to join, noticed
    from either end. One per six places. Finding one is a reason to have gone
@@ -106,9 +114,9 @@ walked. The whole network is a plain dictionary (`to_dict()` / `from_dict()`);
 a save without one rebuilds the same network, because `build()` reads nothing
 but the map.
 
-What it looks like (roads thick, tracks red, hidden paths dashed, hidden
-byways dotted blue; white squares are towns, orange orc holds, red diamonds
-lairs, blue dots landmarks; the rings behind):
+What it looks like (roads thick, lair tracks red, landmark paths pale,
+byways dotted blue, anything still hidden dashed; white squares are towns,
+orange orc holds, red diamonds lairs, blue dots landmarks; the rings behind):
 
 | Small | Large | Procedural, seed 1 |
 |---|---|---|
@@ -118,14 +126,16 @@ lairs, blue dots landmarks; the rings behind):
 
 | Map | Nodes (forks) | Road | Track | Path | Byway | Known length / all | Town-to-town detour, mean (worst) |
 |---|---|---|---|---|---|---|---|
-| small | 21 (4) | 6 | 6 | 8 | 2 | 2971 / 4626 | 1.47 (2.30) |
-| large | 32 (11) | 18 | 7 | 8 | 3 | 11478 / 14461 | 1.21 (1.82) |
-| procedural 1 | 25 (8) | 7 | 9 | 8 | 2 | 11305 / 17130 | 1.12 (1.49) |
-| procedural 2 | 24 (7) | 6 | 9 | 8 | 1 | 7727 / 11461 | 1.16 (1.60) |
-| procedural 3 | 26 (9) | 9 | 8 | 8 | 2 | 8734 / 12998 | 1.16 (1.56) |
-| procedural 4 | 22 (5) | 6 | 7 | 8 | 0 | 6631 / 9920 | 1.07 (1.25) |
+| small | 21 (4) | 6 | 6 | 8 | 2 | 1746 / 4626 | 1.47 (2.30) |
+| large | 32 (11) | 18 | 7 | 8 | 3 | 9293 / 14461 | 1.21 (1.82) |
+| procedural 1 | 25 (8) | 7 | 9 | 8 | 2 | 4405 / 17130 | 1.12 (1.49) |
+| procedural 2 | 24 (7) | 6 | 9 | 8 | 1 | 3154 / 11461 | 1.16 (1.60) |
+| procedural 3 | 26 (9) | 9 | 8 | 8 | 2 | 4401 / 12998 | 1.16 (1.56) |
+| procedural 4 | 22 (5) | 6 | 7 | 8 | 0 | 3303 / 9920 | 1.07 (1.25) |
 
-A build is 5–20 ms. The small map detours most: four towns make a tree of
+Known length is what the company can walk on the first day: the towns' roads.
+Everything else — lair tracks, landmark paths, byways — is found. A build is
+5–20 ms. The small map detours most: four towns make a tree of
 roads with no loop in it, and two of its three roads bend round the lake and
 down the river's bank.
 
@@ -177,7 +187,7 @@ company is only met while it walks a road (the camp keeps its own roll), so a
 stretch of road is what carries the danger. One roll per 100 units
 (`STEP`), chance `1 − e^(−rate · 100/1000)`.
 
-    rate = BASE × cover × lure  +  hunt
+    rate = BASE × cover × lure  +  hunt  +  grudge
 
 - **BASE** — how busy a road is, 0.6 contacts per 1000 units. Measured, not
   chosen, and the same in every ring (§4.1 says why).
@@ -196,24 +206,37 @@ stretch of road is what carries the danger. One roll per 100 units
   company, up to 1.5 contacts per 1000 units near each of its towns, within
   500. Added, not multiplied: a town that hates you does not make the goblins
   keener.
+- **grudge** — a monster people with a grudge (`core/grudges.gd`, §4.2) comes
+  looking: up to 1 more contact per 1000 units at a full grudge, all of it in
+  its own country and near its lairs and holds by their pull. Added, like the
+  hunt.
+
+A **second stream**, rolled apart with its own seed (`meet()`), brings the
+people who are not a fight: near every civilized town not hostile to the
+company, its patrol and its caravans, up to 0.4 meetings per 1000 units at
+the gate and none past 500 — split by `WorldBands.KINDS`' own weights. It
+never replaces a fight the measured `BASE` promised and never adds one. What a
+meeting offers (news, trade, a job) is #232's card, phase 3.
 
 **Who** is the rate split by source — the country's own factions
 (`Regions.HOMES`, weighted by `WorldBands.KINDS`, so the mix a player has
-learned stays the mix), each nearby lair's people, each hunting people.
+learned stays the mix), each nearby lair's people (a hidden lair's too: a
+road that keeps turning up gnolls is how a company learns there is something
+out there to search for), each hunting people, each people with a grudge.
 **What they are made of** is that faction's `KINDS` troop template at the
-ring's levels (the rule `WorldBands.spawn_one` already places a band by), and
-a hunting people sends one more heavy per 20 points it sits below `HOSTILE`,
-two at most. `RouteEncounters.band()` turns the result into an ordinary
+ring's levels (the rule `WorldBands.spawn_one` already places a band by); a
+hunting people sends one more heavy per 20 points it sits below `HOSTILE`,
+and a people with a grudge one more per 40 points of it, two at most. `RouteEncounters.band()` turns the result into an ordinary
 `World.RoamingParty`, so the approach card, `encounter_spec`, the fight and
 the spoils need no second path.
 
-**Why monster opinion is not a term.** The issue says "the opinion of all
-factions". Monster peoples keep no opinion of the company in this codebase
-and never have — `Approach.parley_costs_opinion`, `Contracts.credit` and
-world.gd's `KILLED_THEIRS` all say so on purpose. So opinion reaches the
-monsters through the peoples who keep the roads (cover) and reaches the
-peoples themselves through the hunt. Giving goblins a memory is its own call
-(§7).
+**Opinion, all of it.** The issue says "the opinion of all factions". The
+civilized peoples' opinion reaches the monsters through the roads they keep
+(cover) and reaches the peoples themselves through the hunt. Monster peoples
+keep no opinion of the company in this codebase and never have —
+`Approach.parley_costs_opinion`, `Contracts.credit` and world.gd's
+`KILLED_THEIRS` all say so on purpose — and the owner's call is to give them
+a grudge and only a grudge (§4.2).
 
 **Determinism.** A roll is seeded off the edge, the 100-unit stretch of it and
 the world-day (`step_key()`): the same stretch walked twice in one day meets
@@ -259,6 +282,18 @@ What the sweep leaves out of "today": band-against-band fights
 so today's figure is if anything a little high), fleeing (`WorldFlee` needs
 the world screen's gauge of the party), and the time a fight takes.
 
+### 4.2 The grudge — `core/grudges.gd`
+
+One number per monster people, 0 to 100. Putting down one of its bands adds
+10, emptying one of its lairs 25; it cools 2 points a world-day, the rate a
+town's opinion drifts back to neutral. It is its own model, not
+`FactionOpinion`: that one's scores feed the renown ladder, the markets and
+the achievements, and a monster people must stay out of all three. There is
+no other side to a grudge — no truce, tribute, trade or parley bonus. Phase 1
+calls `add()` where world.gd already credits a won fight and
+`WorldLairs.loot` empties a lair, and saves it beside `"opinion"` in
+`core/world_save.gd`.
+
 ## 5. What is measured and what is taste
 
 | Number | Where | Status |
@@ -267,6 +302,9 @@ the world screen's gauge of the party), and the time a fight takes.
 | `COVER` 0.6, `COVER_RADIUS` 350 | `route_encounters.gd` | taste — first thing phase 1 measures |
 | `LURE` 1.0, `LURE_RADIUS` 350, `LAIR_MIX` 3, `RAID_PULL` 0.5 | `route_encounters.gd` | taste |
 | `HUNT` 1.5, `HUNT_RADIUS` 500, `GRUDGE_STEP` 20, `GRUDGE_MAX` 2 | `route_encounters.gd` | taste |
+| `GRUDGE_HUNT` 1.0, `GRUDGE_HEAVY` 40 | `route_encounters.gd` | taste |
+| `BAND` 10, `LAIR` 25, `DECAY_PER_DAY` 2 | `grudges.gd` | taste; the decay is `FactionOpinion`'s |
+| `MEET` 0.4, `MEET_RADIUS` 500 | `route_encounters.gd` | taste; the second stream leaves `BASE`'s measurement alone |
 | `STEP` 100 | `route_encounters.gd` | a resolution, not a balance number: halving it halves the chance per roll |
 | `FORK_SNAP` 40, `NOTICE_RADIUS` 30 | `world_routes.gd` | geometry, sized off `VISIT_RADIUS` 34 and `ENCOUNTER_RADIUS` 24 |
 | `BYWAY_DETOUR` 1.8, `BYWAY_REACH` 0.35, `BYWAY_PER` 6 | `world_routes.gd` | taste; the counts they give are in §3 |
@@ -282,13 +320,17 @@ they get their sweep.
 
 - **Phase 0 — this spike.** The two models, their tests, the sweep, the
   pictures. Nothing wired.
-- **Phase 1 — behind `SORCMERC_ROUTES=1`.** `World.routes` built with the
-  map and carried by `core/world_save.gd`; the known network drawn on the
-  ground; a click on a known place walks `path_from()` (open ground does
-  nothing, or halts the march); `notice()` every frame, `searchable()` behind
-  the lair button's Survival roll; under the flag no band is seeded or
-  refilled and `RouteEncounters.roll()` runs once per `STEP` walked, handing
-  its band to the existing approach card. The ruins' "read the stones" — whose
+- **Phase 1 — behind `SORCMERC_ROUTES=1`, the next PR.** `World.routes`
+  built with the map and carried by `core/world_save.gd`, with the grudges
+  beside the opinions; the known network drawn on the ground; a click on a
+  known place walks `path_from()`, and a click on open ground does nothing —
+  the company never leaves the road; `notice()` every frame, `searchable()`
+  behind the lair button's Survival roll, made at the fork; under the flag no
+  band is seeded or refilled, `RouteEncounters.roll()` runs once per `STEP`
+  walked and hands its band to the existing approach card, and `meet()` hands
+  a meeting to the friendly card that exists today; `Grudges.add()` on a won
+  fight and an emptied lair; a camp can be made anywhere on a road, and its
+  ambush roll reads that stretch's rate. The ruins' "read the stones" — whose
   win today marks the nearest undiscovered thing — opens a trail to
   `lead_target()` instead, the first door that creates a route (§3.1). A
   drive robot walks every map's network and gives §5's taste numbers their
@@ -307,33 +349,34 @@ they get their sweep.
   has been waiting for; an outcome may pin a follow-up event or encounter on
   a node or edge, which is what makes events chain, and may **open a trail
   or a new place** (`open_route`, `open_place`) — a decision that changes the
-  map. The table moves to data (`data/road_events.json`) so packs can add to
+  map, each outcome saying whether its trail is shown at once or only
+  noticed when the company passes where it starts. The table moves to data (`data/road_events.json`) so packs can add to
   it, and story packs get the same door as an effect beside `reveal_lair`
   (additive vocabulary, through `sorcmerc-compat`).
 - **Phase 4 — #233.** The same network at the scale of a settlement: its
   districts, shops and hidden corners as nodes, found by walking.
 
-## 7. Open questions for the owner
+## 7. The owner's calls (2026-09-25)
 
-1. **Lairs: known from the start, or known as a place?** The issue lists
-   lairs as obvious, and the network follows it: every lair has a known
-   track. Today a lair is hidden until a Survival check. The spike's
-   recommendation: the *place* is known, what is *in* it is scouted (the
-   check tells you the faction and the depth before you commit).
-2. **Can the company leave the road at all?** Recommendation: not in phase 1.
-   If it can later, cross-country should cost time and raise the rate, and
-   the pathfinding is already there (`WorldPath`).
-3. **Friendly meetings on the road** — a patrol with news, a caravan to trade
-   with. Today a friendly band is only met by clicking it. #232 wants
-   encounters that are not fights; the model has a slot for a second,
-   non-hostile stream beside the threat one.
-4. **Should monster peoples remember?** A goblin tribe whose warren you
-   burned coming after you is a strong beat, and a new rule with gravity: it
-   touches parley, contracts and the ladder. The spike leaves it out (§4).
-5. **Where can a company camp?** Anywhere on a road (the camp's ambush roll
-   reading the road's rate), or only at a node.
-6. **Should the far country be busier, not just harder?** Today it is
-   quieter (§4.1), which is an accident of hunting bands making for the
-   towns. The model is flat — the ring already sets who you meet and at what
-   level. A shape (say the Deeps at twice the Heartland's rate, the total held)
-   is one line, and a taste call.
+Asked at the end of the spike, answered the same day. What each one changed:
+
+1. **Lairs stay hidden, like today.** Not "obvious" after all: a lair's track
+   is a `search` edge, found by the Survival check at its fork (§3). A lair's
+   lure still thickens its roads while hidden.
+2. **The company never leaves the road.** Clicking open ground does nothing
+   (phase 1). Discovering paths, byways and trails is the only way to widen
+   where you can go.
+3. **Friendly meetings are a second stream**, apart from the threat odds
+   (§4, `meet()`).
+4. **Monster peoples hold a grudge — only a grudge** (§4.2,
+   `core/grudges.gd`). No truce, tribute or trade side.
+5. **A camp can be made anywhere on a road**; the camp's ambush roll reads
+   that stretch's rate (phase 1).
+6. **The far country is as busy as the near one.** `BASE` stays flat; the
+   ring sets who you meet and how strong the fight is (§4.1).
+7. **A new trail is shown at once or not by the outcome that opens it**
+   (`open_route(…, known)`, §3.1, phase 3).
+8. **Next is phase 1, behind the flag** (§6).
+
+Nothing is open. Phase 3 will need its own calls on what a meeting and a road
+event can offer, and those belong to #232 and #234.

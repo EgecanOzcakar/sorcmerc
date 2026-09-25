@@ -39,6 +39,12 @@
 #                 FactionOpinion.HOSTILE) sends its own patrols out after it,
 #                 near its towns. Added, not multiplied: a town that hates you
 #                 does not make the goblins any keener.
+#   grudge        a monster people with a grudge (core/grudges.gd) comes
+#                 looking wherever it is at home. Added, like the hunt.
+#
+# A SECOND STREAM, meet(), rolls the friendly meetings — a town's patrol, a
+# caravan — apart from all of the above, so the threat stream's measured rate
+# stays exactly what it says.
 #
 # WHO is the rate split by source: the monster part among the factions whose
 # country this is (Regions.HOMES, weighted by WorldBands.KINDS — the table the
@@ -47,16 +53,16 @@
 # part to the people doing the hunting. WHAT THEY ARE MADE OF is the KINDS row's
 # troop template at the ring's levels (the rule WorldBands.spawn_one uses), and
 # a people that hates the company past HOSTILE sends a heavier patrol, one more
-# heavy per GRUDGE_STEP points below it.
+# heavy per GRUDGE_STEP points below it; a monster people with a grudge, one
+# more per GRUDGE_HEAVY points of it.
 #
-# WHY MONSTER OPINION IS NOT A TERM. The issue asks for "the opinion of all
-# factions" to shape the odds. Monster peoples keep no opinion of the company
-# in this codebase and never have (core/approach.gd's parley_costs_opinion,
-# core/contracts.gd's credit(), world.gd's KILLED_THEIRS): only the civilized
-# peoples do. So opinion reaches the monsters through the peoples who keep the
-# roads — the cover term — and reaches the peoples themselves through the hunt
-# term. Giving monster peoples an opinion is its own design call, listed in the
-# spike doc's open questions.
+# OPINION, ALL OF IT. The issue asks for "the opinion of all factions" to shape
+# the odds. The civilized peoples' opinion reaches the monsters through the
+# roads they keep (cover) and reaches the peoples themselves through the hunt.
+# Monster peoples keep no opinion in this codebase and never have
+# (core/approach.gd's parley_costs_opinion, core/contracts.gd's credit(),
+# world.gd's KILLED_THEIRS); the owner's call (2026-09-25) gives them a grudge
+# and only a grudge, in its own model (core/grudges.gd), read by the grudge term.
 #
 # DETERMINISM. A roll is seeded off the caller's key — the edge, the stretch of
 # it, and the world-day (step_key()) — so walking the same stretch on the same
@@ -73,10 +79,11 @@ const Regions = preload("res://core/regions.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 const WorldBands = preload("res://core/world_bands.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const Grudges = preload("res://core/grudges.gd")
 const RNG = preload("res://core/rng.gd")
 
-# Contacts per 1000 units walked, before cover, lure and hunt — the same in
-# every ring. Calibrated so the model's mean rate along the sweep's itineraries
+# Contacts per 1000 units walked, before cover, lure, hunt and grudge — the
+# same in every ring. Calibrated so the model's mean rate along the sweep's itineraries
 # equals the rate today's free-roaming map actually delivers, so switching the
 # model in changes WHERE the danger is, not how much of it there is.
 #
@@ -125,6 +132,20 @@ const HUNT := 1.5
 const HUNT_RADIUS := 500.0
 const GRUDGE_STEP := 20.0
 const GRUDGE_MAX := 2
+# Grudge (core/grudges.gd): a monster people holding one adds up to GRUDGE_HUNT
+# contacts per 1000 units at a full grudge, wherever it is at home — all of it
+# in its own country, and near one of its lairs or holds by that place's pull —
+# and sends one more heavy per GRUDGE_HEAVY points of grudge, at most
+# GRUDGE_MAX. Added like the hunt, not multiplied. Taste numbers.
+const GRUDGE_HUNT := 1.0
+const GRUDGE_HEAVY := 40.0
+# Meetings, the second stream: a civilized town not hostile to the company has
+# its own people on its roads — its patrol, and caravans — up to MEET meetings
+# per 1000 units at its gate, falling off over MEET_RADIUS. Rolled apart from
+# the threat stream (meet()), so the measured BASE above still says exactly
+# how often the road means a fight. Taste numbers.
+const MEET := 0.4
+const MEET_RADIUS := 500.0
 # A faction with no KINDS row (dragon, elemental, construct, fey) weighs this
 # in its home country's mix, and fields this troop template.
 const RARE_WEIGHT := 1
@@ -145,7 +166,8 @@ static func _live_lair(l) -> bool:
 
 # Everything that makes this point as dangerous as it is, for tests, the sweep
 # and (phase 1) the map's "the road feels..." line:
-#   {ring, base, cover, lure, monster, hunt: {faction: rate}, rate,
+#   {ring, base, cover, lure, monster, hunt: {faction: rate},
+#    grudge: {faction: rate}, rate,
 #    pulls: [{faction, pull}] — the lairs and holds dragging their people in}
 static func factors(world, pos: Vector2) -> Dictionary:
 	var ring: Dictionary = Regions.at(world, pos)
@@ -185,8 +207,20 @@ static func factors(world, pos: Vector2) -> Dictionary:
 	var total := monster
 	for f in hunt:
 		total += float(hunt[f])
+	var grudge := {}
+	var homes: Array = Regions.HOMES.get(String(ring["id"]), [])
+	var held: Dictionary = Grudges.all()
+	for f in held:
+		var presence := 1.0 if homes.has(f) else 0.0
+		for pull in pulls:
+			if pull["faction"] == f:
+				presence = maxf(presence, float(pull["pull"]) / LAIR_MIX)
+		var g: float = GRUDGE_HUNT * float(held[f]) / Grudges.MAX * presence
+		if g > 0.0:
+			grudge[f] = g
+			total += g
 	return {"ring": ring["id"], "base": base, "cover": cover, "lure": lure, "monster": monster,
-		"hunt": hunt, "rate": total, "pulls": pulls}
+		"hunt": hunt, "grudge": grudge, "rate": total, "pulls": pulls}
 
 static func rate(world, pos: Vector2) -> float:
 	return float(factors(world, pos)["rate"])
@@ -208,7 +242,7 @@ static func _home_weight(faction: String) -> float:
 	return float(w)
 
 # Every source that could be met here, each carrying its share of rate():
-#   [{faction, source: "country" | "lair" | "hunt", rate}]
+#   [{faction, source: "country" | "lair" | "hunt" | "grudge", rate}]
 # sorted by faction then source, so the order (and a seeded pick off it) is
 # stable. Rates sum to rate(world, pos).
 static func candidates(world, pos: Vector2) -> Array:
@@ -235,6 +269,8 @@ static func candidates(world, pos: Vector2) -> Array:
 						"rate": float(f["monster"]) * w / sum})
 	for faction in f["hunt"]:
 		out.append({"faction": faction, "source": "hunt", "rate": float(f["hunt"][faction])})
+	for faction in f["grudge"]:
+		out.append({"faction": faction, "source": "grudge", "rate": float(f["grudge"][faction])})
 	out.sort_custom(func(a, b): return String(a["faction"]) + String(a["source"]) < String(b["faction"]) + String(b["source"]))
 	return out
 
@@ -250,7 +286,7 @@ static func chance(world, pos: Vector2, walked := STEP) -> float:
 	return 1.0 - exp(-rate(world, pos) * walked / 1000.0)
 
 # One roll for `walked` units at `pos`: {} when the road is quiet, else a spec
-# (compose()). `key` seeds it (step_key()); `party` only colours the grudge.
+# (compose()). `key` seeds it (step_key()).
 static func roll(world, pos: Vector2, key: String, walked := STEP) -> Dictionary:
 	var rng = RNG.new(maxi(1, absi(hash("route|%s" % key))))
 	var cands := candidates(world, pos)
@@ -272,13 +308,19 @@ static func roll(world, pos: Vector2, key: String, walked := STEP) -> Dictionary
 	return compose(world, pos, chosen, rng, key)
 
 # What the chosen source fields: {id, kind, faction, source, troops, hostile}.
-# A monster people fields one of its KINDS rows (weighted); a hunting people its
-# own patrol row, heavier for the grudge. Levels are the ring's, the rule
-# WorldBands.spawn_one places a band by.
+# A monster people fields one of its KINDS rows (weighted), heavier for a
+# grudge; a hunting people its own patrol row, heavier the further past HOSTILE
+# it is; a meeting its town's patrol or a caravan. Levels are the ring's, the
+# rule WorldBands.spawn_one places a band by.
 static func compose(world, pos: Vector2, cand: Dictionary, rng, key := "") -> Dictionary:
 	var faction: String = cand["faction"]
-	var hunting: bool = cand["source"] == "hunt"
-	var rows: Array = WorldBands.KINDS.filter(func(k): return k["faction"] == faction and (k["ai"] == "patrol") == hunting)
+	var source: String = cand["source"]
+	var ai := "hunt"
+	if source in ["hunt", "patrol"]:
+		ai = "patrol"
+	elif source == "caravan":
+		ai = "caravan"
+	var rows: Array = WorldBands.KINDS.filter(func(k): return k["ai"] == ai and (ai == "caravan" or k["faction"] == faction))
 	var kind := "%s-band" % faction
 	var roles: Array = RARE_ROLES.duplicate()
 	if not rows.is_empty():
@@ -292,10 +334,13 @@ static func compose(world, pos: Vector2, cand: Dictionary, rng, key := "") -> Di
 				kind = k["id"]
 				roles = (k["roles"] as Array).duplicate()
 				break
-	if hunting:
-		var below: float = FactionOpinion.HOSTILE - FactionOpinion.get_opinion(faction)
-		for _i in mini(GRUDGE_MAX, int(floor(below / GRUDGE_STEP))):
-			roles.append("heavy")
+	var heavier := 0
+	if source == "hunt":
+		heavier = int(floor((FactionOpinion.HOSTILE - FactionOpinion.get_opinion(faction)) / GRUDGE_STEP))
+	elif source == "grudge":
+		heavier = int(floor(Grudges.get_grudge(faction) / GRUDGE_HEAVY))
+	for _i in clampi(heavier, 0, GRUDGE_MAX):
+		roles.append("heavy")
 	var lv: Array = Regions.at(world, pos)["levels"]
 	var troops: Array = []
 	for role in roles:
@@ -303,6 +348,72 @@ static func compose(world, pos: Vector2, cand: Dictionary, rng, key := "") -> Di
 	return {"id": "met-%s-%d" % [kind, absi(hash("met|%s" % key)) % 100000], "kind": kind,
 		"faction": faction, "source": cand["source"], "troops": troops,
 		"hostile": WorldAI.is_monster(faction) or FactionOpinion.is_hostile_to_player(faction)}
+
+# --- the second stream: meetings -----------------------------------------------
+#
+# The owner's call (2026-09-25): the road also brings people who are not a
+# fight — a town's patrol with news, a caravan to trade with. Its own stream,
+# rolled with its own seed, so a meeting never takes the place of a fight the
+# measured BASE promised and never adds one. Near every civilized town that is
+# not hostile to the company: its patrol and caravans, split by
+# WorldBands.KINDS' own weights. What a meeting offers is #232's card (phase 3);
+# here it is only who, how often, and what they field.
+
+# [{faction, source: "patrol" | "caravan", rate}], sorted like candidates().
+static func meet_candidates(world, pos: Vector2) -> Array:
+	var caravan_w := 0.0
+	for k in WorldBands.KINDS:
+		if k["ai"] == "caravan":
+			caravan_w += float(k["weight"])
+	var by := {}
+	for s in world.settlements:
+		if WorldAI.is_monster(s.faction) or FactionOpinion.is_hostile_to_player(s.faction):
+			continue
+		var p := _prox(pos.distance_to(s.position), MEET_RADIUS)
+		if p <= 0.0:
+			continue
+		var patrol_w := 0.0
+		for k in WorldBands.KINDS:
+			if k["ai"] == "patrol" and k["faction"] == s.faction:
+				patrol_w += float(k["weight"])
+		var sum := patrol_w + caravan_w
+		if sum <= 0.0:
+			continue
+		for pair in [["patrol", patrol_w], ["caravan", caravan_w]]:
+			if float(pair[1]) > 0.0:
+				var key: String = "%s|%s" % [s.faction, pair[0]]
+				by[key] = float(by.get(key, 0.0)) + MEET * p * float(pair[1]) / sum
+	var out: Array = []
+	for key in by:
+		var parts: PackedStringArray = String(key).split("|")
+		out.append({"faction": parts[0], "source": parts[1], "rate": float(by[key])})
+	out.sort_custom(func(a, b): return String(a["faction"]) + String(a["source"]) < String(b["faction"]) + String(b["source"]))
+	return out
+
+static func meet_rate(world, pos: Vector2) -> float:
+	var t := 0.0
+	for c in meet_candidates(world, pos):
+		t += float(c["rate"])
+	return t
+
+# One roll of the second stream: {} most stretches, else a meeting's spec
+# (compose(), `hostile` false). Seeded apart from roll() on the same key.
+static func meet(world, pos: Vector2, key: String, walked := STEP) -> Dictionary:
+	var rng = RNG.new(maxi(1, absi(hash("meet|%s" % key))))
+	var cands := meet_candidates(world, pos)
+	var total := 0.0
+	for c in cands:
+		total += float(c["rate"])
+	if total <= 0.0 or _frac(rng) >= 1.0 - exp(-total * walked / 1000.0):
+		return {}
+	var pick := _frac(rng) * total
+	var chosen: Dictionary = cands[-1]
+	for c in cands:
+		pick -= float(c["rate"])
+		if pick < 0.0:
+			chosen = c
+			break
+	return compose(world, pos, chosen, rng, "meet|" + key)
 
 # The spec as a band standing at `pos`: what the approach card and
 # _launch_combat already take, so phase 1 needs no second fight path. Not added
