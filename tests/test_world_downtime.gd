@@ -50,6 +50,24 @@ func button_named(node: Node, text: String):
 			return b
 	return null
 
+func label_named(node: Node, text: String) -> Label:
+	for c in node.get_children():
+		if c is Label and String(c.text) == text:
+			return c
+		var l := label_named(c, text)
+		if l != null:
+			return l
+	return null
+
+# The nearest ScrollContainer over `n`, or null.
+func scroll_of(n: Node) -> ScrollContainer:
+	var p := n.get_parent()
+	while p != null:
+		if p is ScrollContainer:
+			return p
+		p = p.get_parent()
+	return null
+
 func buttons_named(node: Node, text: String) -> Array:
 	return buttons(node).filter(func(b): return String(b.text) == text)
 
@@ -113,8 +131,51 @@ func _init() -> void:
 	await process_frame
 	check(said(main, "Downtime"), "the inn has a Downtime section")
 	check(said(main, "Train %s in a feat (%d ◉, five days)" % [hero.cname, Downtime.train_cost(hero)]), "the trainer's row names the hero and the fee")
-	check(said(main, "A night on the town (%d ◉)" % Downtime.CAROUSE_COST["city"]), "the night on the town")
+	check(said(main, "A night on the town (%d ◉, and %d ◉ for the bed)" % [Downtime.CAROUSE_COST["city"], Downtime.bed_cost(city, 1, party)]),
+		"the night on the town, at its whole price (#237)")
 	check(said(main, "Sit in on a game"), "the game")
+
+	# --- #228: the inn's head stays put; "Looking for work" and below scroll ----
+	for i in 3:
+		await process_frame   # the list is fitted the frame after the page is built
+	var list: ScrollContainer = main._visit_list
+	check(list != null and list.is_inside_tree(), "the inn has its own list")
+	var looking: Label = label_named(main._visit_panel, "Looking for work")
+	var table: Label = label_named(main._visit_panel, "Around the table")
+	var rest_btn = button_named(main._visit_panel, "Rest the night")
+	check(looking != null and scroll_of(looking) == list, "\"Looking for work\" is the top of the list that scrolls")
+	check(label_named(list, "Downtime") != null and label_named(list, "Word in the common room") != null, "...with the downtime rows and the rumours under it")
+	check(table != null and scroll_of(table) == null and rest_btn != null and scroll_of(rest_btn) == null,
+		"the table and the bed above it are in no scroll at all: pinned")
+	check(list.custom_minimum_size.y >= main.VISIT_LIST_MIN_H, "the list has room (%d px)" % list.custom_minimum_size.y)
+	var content_h: float = (list.get_child(0) as Control).get_combined_minimum_size().y
+	check(content_h > list.custom_minimum_size.y, "...and more under it than it shows (%d over %d), so it scrolls" % [content_h, list.custom_minimum_size.y])
+	list.scroll_vertical = 120
+	await process_frame
+	main._build_visit_panel()   # every click on the page rebuilds it
+	for i in 4:
+		await process_frame
+	check(main._visit_list != list and main._visit_list.scroll_vertical == 120,
+		"a rebuild keeps the list where it was scrolled (%d)" % main._visit_list.scroll_vertical)
+	main._goto_page("hub")
+	main._goto_page("inn")
+	for i in 4:
+		await process_frame
+	check(main._visit_list.scroll_vertical == 0, "walking back in starts it at the top")
+
+	# --- #237: a night the purse cannot cover is grey, and says why at the row ---
+	var rich: int = party.gold
+	party.gold = Downtime.CAROUSE_COST["city"]   # the drinks, not the bed
+	main._build_visit_panel()
+	await process_frame
+	var go_out = button_named(main._visit_panel, "Go out")
+	check(go_out != null and go_out.disabled, "Go out is grey with the bed unpaid for")
+	check(said(main._visit_panel, Downtime.carouse_refusal(party, city)) and Downtime.carouse_refusal(party, city) != "",
+		"...and the row says why: %s" % Downtime.carouse_refusal(party, city))
+	party.gold = rich
+	main._build_visit_panel()
+	await process_frame
+	check(not button_named(main._visit_panel, "Go out").disabled, "with the purse to cover it, it is on")
 	var names: Array = Downtime.pit_bracket(city, w)["names"]
 	check(said(main, "The pit: %s, %s and %s stand this week (purse %d ◉)." % [names[0], names[1], names[2], Downtime.PIT_PURSE[0]]), "the pit's three, at a city")
 	check(buttons_named(main, "Go").size() == 2, "a Go for the trainer and one for the game (%d)" % buttons_named(main, "Go").size())
@@ -147,6 +208,7 @@ func _init() -> void:
 	for i in 3:
 		await process_frame
 	check("makes friends of half the room" in String(main._visit.get("log", "")), "the contact's line: %s" % main._visit.get("log", ""))
+	check(said(main._visit_panel, "Last night: " + String(main._visit.get("log", ""))), "#237: ...and under the row that was pressed")
 	check(main._event_card != null and String(main._event_card._e.get("id", "")) == "downtime-carouse"
 		and String(main._event_card._e.get("title", "")) == "A night on the town", "...on a card: %s" % (main._event_card._e.get("id", "") if main._event_card != null else "none"))
 	main._event_card.acknowledged.emit()
@@ -229,6 +291,18 @@ func _init() -> void:
 	gold_before = party.gold
 	var fight = button_named(main, "Fight")
 	check(fight != null, "the pit row's button")
+	# #236: one on one — the row asks who goes in; the second of the company goes
+	var pick: OptionButton = null
+	for c in fight.get_parent().get_children():
+		if c is OptionButton:
+			pick = c
+	var fighters: Array = Downtime.pit_fighters(party)
+	check(pick != null and pick.item_count == fighters.size() and fighters.size() >= 2,
+		"a picker beside Fight, one line per hero on their feet (%d)" % (pick.item_count if pick != null else -1))
+	check(fight.get_parent().get_child(fight.get_parent().get_child_count() - 1) == fight, "...and Fight still ends the row")
+	var order_before: Array = Array(party.active).duplicate()
+	var pitter = fighters[1]
+	pick.select(1)
 	fight.pressed.emit()
 	var guard := 0
 	while main._combat == null and guard < 60:
@@ -240,14 +314,20 @@ func _init() -> void:
 	check(foes.size() == 1, "one foe in the pit (%d)" % foes.size())
 	check(not foes.is_empty() and String(foes[0].cname).begins_with(names[0]), "...the first champion, by name: %s" % (foes[0].cname if not foes.is_empty() else ""))
 	check(main._combat != null and main._combat.spec.get("theme", "") == Downtime.PIT_THEME, "in the square")
+	var ours: Array = main._combat.cb.team_of("party") if main._combat != null else []
+	check(ours.size() == 1 and ours[0].id == pitter.id, "one hero in the pit, the one picked: %s" % [ours.map(func(c): return c.id)])
 	var xp_before: int = hero.xp
+	var pitter_xp: int = pitter.xp
 	await _finish(main, {"outcome": "Victory", "xp": 30, "gold": 5, "loot": ["dagger"], "kills": [], "deaths": [], "rounds": 2,
 		"objective": {"kind": "", "done": false, "xp": 0}})
+	check(Array(party.active) == order_before, "after the bout the marching order is as it was")
+	check(pitter.xp == pitter_xp + 30 and hero.xp == xp_before, "the bout's XP is the hero's who fought it, all of it (%d)" % (pitter.xp - pitter_xp))
+	check(main._event_card != null and pitter.cname in String(main._event_card._e.get("text", "")), "the card names who won")
 	check(main._event_card != null and String(main._event_card._e.get("id", "")) == "downtime-pit", "a won bout is a card")
 	check(main._event_card != null and int(main._event_card._e.get("gold", 0)) == Downtime.PIT_PURSE[0], "...with the purse on it")
 	check(main._event_card != null and int(main._event_card._e.get("xp", 0)) == 30, "...and the fight's XP")
 	check(party.gold == gold_before + Downtime.PIT_PURSE[0] + 5, "the purse is paid, and the kill's gold banked")
-	check(hero.xp > xp_before and party.stash_count("dagger") >= 1, "the bout banks what a fight banks: XP and loot")
+	check(party.stash_count("dagger") >= 1, "the bout banks what a fight banks: loot too")
 	check(Ladder.deeds(city.faction) == 1, "and a deed with the city's people")
 	main._event_card.acknowledged.emit()
 	for i in 3:

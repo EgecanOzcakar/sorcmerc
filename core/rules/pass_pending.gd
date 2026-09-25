@@ -1,6 +1,7 @@
 # Every choice-bearing grant that is undecided or invalidly decided -> a pending entry.
 # Ported from the pending blocks of dnd-maintainer src/lib/resolver/index.ts.
-# bundle-choice is deliberately absent: it surfaces as a warning from pass_gear (spec §2.3).
+# bundle-choice is deliberately absent: the creator's Equipment step answers it, and
+# pass_gear.gd says why that is not a warning either (#189, spec §2.3).
 extends RefCounted
 
 const Bundles = preload("res://core/rules/bundles.gd")

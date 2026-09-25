@@ -5,6 +5,7 @@
 extends RefCounted
 
 const Catalog = preload("res://core/rules/catalog.gd")
+const PassSpells = preload("res://core/rules/pass_spells.gd")
 
 const KINDS := ["passive_damage", "self_buff", "ally_buff", "heal_self", "heal_ally",
 	"grant_action", "grant_verb", "attacks_per_action", "attack_modifier", "damage_bonus",
@@ -328,7 +329,13 @@ static func spell_verbs_for(sheet, spell_ids: Array, slots_override: Array = [])
 			# of buttons for spending a better slot on nothing.
 			top = base
 		for lvl in range(base, top + 1):
-			out.append(_spell_verb(sid, m, lvl, base, sheet, abil_mod, int(sc.get("save_dc", 0))))
+			var v := _spell_verb(sid, m, lvl, base, sheet, abil_mod, int(sc.get("save_dc", 0)))
+			if lvl == base and base > 0 and sid in sc.get("innate", []):
+				# #246: the species/feat's free cast rides the base-level verb.
+				# combat.gd spends it before a slot (_pay_spell), so the one
+				# button casts free first, then from slots if there are any.
+				v["innate_pool"] = PassSpells.innate_pool(sid)
+			out.append(v)
 	return out
 
 static func _spell_verb(sid: String, m: Dictionary, lvl: int, base: int, sheet,

@@ -3385,6 +3385,7 @@ func _open_visit(s) -> void:
 	_calling_check("visited", s.id, _leader())   # shown when the visit closes
 	_visit = Visit.visit(s, world)
 	_visit_page = "hub"
+	_visit_list_v.clear()
 	_market_tab = MARKET_TAB_ALL
 	Sound.play_sfx("settlement")   # the gate, once, on arriving — not on every page
 	# Home: the garden's potions and the map room's marks, gathered on the step
@@ -3398,6 +3399,7 @@ func _open_visit(s) -> void:
 
 func _goto_page(page: String) -> void:
 	_visit_page = page
+	_visit_list_v.erase(page)   # a page walked into starts at its top (#228)
 	if page == "market":
 		_market_tab = _first_counter()   # every visit to the stalls starts at the first counter
 		Sound.play_sfx("shop")         # the shop door, over the button's own click
@@ -4300,20 +4302,37 @@ func _build_visit_panel() -> void:
 	# counter open, a lodge, a battlefield to pick over — and the lists inside a
 	# page were the only part that scrolled. The page body scrolls as a whole
 	# now, capped at what the window has left, so Leave is always on screen.
-	var body_scroll := ScrollContainer.new()
-	body_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	body_scroll.custom_minimum_size = Vector2(VISIT_PANEL_W, _visit_body_h)
+	#
+	# #228: except a page whose head is the part you read and whose list is the
+	# part you work through — the inn (the bed, who is hurt) and the lodge (the
+	# house's bed). Scrolled as a whole, the inn's head went up and out of sight
+	# with the list, and the list scrolled again inside it: two scrollbars, one
+	# inside the other. On those pages the head is pinned, and the one list under
+	# it takes whatever height the window has left (_fit_visit_list).
+	var pinned: bool = _visit_page in PINNED_PAGES
+	_visit_list = null
+	var body_scroll: ScrollContainer = null
 	var body := VBoxContainer.new()
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	body_scroll.add_child(body)
-	box.add_child(body_scroll)
+	if pinned:
+		body.custom_minimum_size.x = VISIT_PANEL_W
+		box.add_child(body)
+	else:
+		body_scroll = ScrollContainer.new()
+		body_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		body_scroll.custom_minimum_size = Vector2(VISIT_PANEL_W, _visit_body_h)
+		body_scroll.add_child(body)
+		box.add_child(body_scroll)
 	match _visit_page:
 		"market": _build_market_page(body, s)
 		"inn": _build_inn_page(body, s)
 		"board": _build_board_page(body, s)
 		"lodge": _build_lodge_page(body, s)
 		_: _build_hub_page(body, s)
-	_fit_visit_body(body_scroll, body)
+	if body_scroll != null:
+		_fit_visit_body(body_scroll, body)
+	elif _visit_list != null:
+		_fit_visit_list(_visit_list, body)
 
 	_visit_log = Label.new()
 	_visit_log.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -4399,6 +4418,46 @@ func _fit_visit_body(body_scroll: ScrollContainer, body: Control) -> void:
 	var cap: float = maxf(160.0, size.y - VISIT_BODY_CHROME_H)
 	_visit_body_h = minf(body.get_combined_minimum_size().y, cap)
 	body_scroll.custom_minimum_size.y = _visit_body_h
+
+# #228: the pages whose head stays put while the list under it scrolls.
+const PINNED_PAGES := ["inn", "lodge"]
+# The list a pinned page scrolls ("Looking for work" and everything under it,
+# at the inn), set by the page's builder; null on every other page.
+var _visit_list: ScrollContainer = null
+# The shortest the list gets under a head too tall for the window: a few rows
+# still show, and the panel runs past the bottom rather than the list
+# vanishing. A guard, not a case the game meets: the project stretches the
+# canvas to "expand" from 1280x800, so the screen is never under 800 high,
+# and the inn's head is about 430 of the 630 that leaves the body.
+const VISIT_LIST_MIN_H := 150.0
+# The list's last fitted height, and where it was scrolled to, by page. A page
+# is rebuilt on every click, and every rebuild used to throw the list back to
+# its top: a row pressed far down it (a night on the town, #237) answered from
+# a list that had jumped away from under the pointer. Cleared on changing page
+# and on opening a visit, so a new page starts at its top.
+var _visit_list_h := 300.0
+var _visit_list_v := {}
+
+# The pinned page's list, fitted the frame after it is built (a wrapped label
+# has no height before then): whatever the window leaves under the head, and
+# no taller than the list itself. Then scrolled back to where it was.
+func _fit_visit_list(scroll: ScrollContainer, body: Control) -> void:
+	var page := _visit_page
+	var keep: float = float(_visit_list_v.get(page, 0.0))   # read before the new bar can report its own 0
+	await get_tree().process_frame
+	if not is_instance_valid(scroll) or not is_instance_valid(body):
+		return
+	var cap: float = maxf(160.0, size.y - VISIT_BODY_CHROME_H)
+	var head: float = body.get_combined_minimum_size().y - scroll.get_combined_minimum_size().y
+	var content: float = (scroll.get_child(0) as Control).get_combined_minimum_size().y
+	_visit_list_h = maxf(minf(content, cap - head), minf(content, VISIT_LIST_MIN_H))
+	scroll.custom_minimum_size.y = _visit_list_h
+	if keep > 0.0:
+		await get_tree().process_frame   # the bar's range is the new height's only after a layout
+		if not is_instance_valid(scroll):
+			return
+		scroll.scroll_vertical = int(keep)
+	scroll.get_v_scroll_bar().value_changed.connect(func(v: float): _visit_list_v[page] = v)
 
 const PAGE_TITLES := {"hub": "Town Square", "market": "Market", "inn": "Inn", "board": "Notice Board", "lodge": "Your Lodge"}
 
@@ -4779,9 +4838,13 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 	# existed — discovery by collision. This is where you hear about it
 	# instead, which is what makes a town worth walking back to. Five rumours
 	# under the art and the table ran the panel off the bottom of a 900 px
-	# screen before the Downtime rows came, so the list scrolls.
-	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(INN_LIST_H)))
+	# screen before the Downtime rows came, so the list scrolls — and since #228
+	# it is the only thing on the page that does: everything above "Looking for
+	# work" stays put, and the list takes the height the window has left
+	# (_fit_visit_list; PINNED_PAGES).
+	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _visit_list_h))
 	box.add_child(scroll)
+	_visit_list = scroll
 	var list: VBoxContainer = scroll.get_child(0)   # `rows` is the party-status list above
 	_hiring_rows(list, s)
 	_section(list, "Downtime")
@@ -4793,8 +4856,6 @@ func _build_inn_page(box: VBoxContainer, s) -> void:
 	for lead in leads:
 		_trade_row(list, String(lead["text"]), "Buy  %d ◉" % int(lead["price"]), _buy_rumor.bind(lead),
 			false, null, String(lead.get("where", "")))
-
-const INN_LIST_H := 300.0
 
 # --- Looking for work (core/recruits.gd): today's common room ----------------
 # One row per chair: who they are in a line, what they are like under it, and
@@ -4862,11 +4923,19 @@ func _open_settle_in(s, offer: Dictionary) -> void:
 # line under the row (_downtime_done) and, when the night went wrong, a card
 # (_complicate).
 func _downtime_rows(rows: VBoxContainer, s) -> void:
-	var pupils: Array = party.party_characters().filter(func(ch): return Downtime.can_train(party, ch))
+	# A hero with no feat left the trainer can finish is not offered: their row
+	# was an empty picker beside a Go that answered "will not take them".
+	var pupils: Array = party.party_characters().filter(
+		func(ch): return Downtime.can_train(party, ch) and not Downtime.trainable(ch).is_empty())
 	if not pupils.is_empty():
 		_train_row(rows, pupils)
-	_trade_row(rows, "A night on the town (%d ◉)" % int(Downtime.CAROUSE_COST.get(s.kind, Downtime.CAROUSE_COST["town"])),
-		"Go out", _carouse)
+	# #237: the row names the whole night (the drinks and the bed), is grey with
+	# the reason under it when the purse cannot cover it, and keeps the last
+	# night's line under it, so a press is answered where it was made.
+	var night: Dictionary = Downtime.carouse_cost(party, s)
+	var no_night: String = Downtime.carouse_refusal(party, s)
+	_trade_row(rows, "A night on the town (%d ◉, and %d ◉ for the bed)" % [int(night["drinks"]), int(night["bed"])],
+		"Go out", _carouse, no_night != "", null, no_night if no_night != "" else String(_visit.get("carouse_line", "")))
 	# The game: a stake the purse can cover, once a day in this town.
 	var row := HBoxContainer.new()
 	rows.add_child(row)
@@ -4926,8 +4995,28 @@ func _pit_row(rows: VBoxContainer, s) -> void:
 	var st: Dictionary = Downtime.pit_state(party, s, world)
 	var b: int = int(st["beaten"])
 	if st["open"]:
+		# #236: one on one. The row asks who goes in — the marching company's
+		# own, on their feet (Downtime.pit_fighters) — between the bracket and
+		# the Fight button, which stays the row's last child (the drive robots
+		# find a row by its label and press what ends it).
+		var fighters: Array = Downtime.pit_fighters(party)
+		var who := OptionButton.new()
+		who.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		for ch in fighters:
+			who.add_item("%s, %s %d" % [ch.cname, ChoicePick.humanize(ch.class_id()).to_lower(), ch.level()])
+		who.tooltip_text = "Who goes in. One hero against one champion; the rest of the company watches."
 		_trade_row(rows, "The pit: %s, %s and %s stand this week (purse %d ◉)." % [names[0], names[1], names[2], Downtime.PIT_PURSE[b]],
-			"Fight", _pit_bout, false, null, "%s stands next." % names[b])
+			"Fight", func(): _pit_bout(String(fighters[who.selected].id) if who.selected >= 0 else ""),
+			fighters.is_empty(), null,
+			("%s stands next, one on one." % names[b]) if not fighters.is_empty()
+				else "%s stands next, and nobody in the company is on their feet to meet them." % names[b])
+		var row: HBoxContainer = rows.get_child(rows.get_child_count() - 1)
+		row.add_child(who)
+		row.move_child(who, row.get_child_count() - 2)
+		for c in row.get_children():   # the label's floor gives the picker room inside the panel
+			if c is VBoxContainer:
+				for l in c.get_children():
+					(l as Control).custom_minimum_size.x = 220
 	elif b < 0:
 		_note(rows, "The pit: carried out this week. The bracket is closed until the next.")
 	else:
@@ -4946,8 +5035,12 @@ func _carouse() -> void:
 	var r: Dictionary = Downtime.carouse(party, world, _visit["settlement"])
 	var c: Dictionary = _complicate(String(r.get("complication", "")), int(r.get("cost", 0)))
 	# The night's card (a contact) or its story (a complication) waits for the
-	# die: it would say how the roll went before the roll had landed.
+	# die: it would say how the roll went before the roll had landed. So does
+	# the line the row keeps (#237), put under it once the die is down.
 	_downtime_done(r, "Nobody in the company is fit for a night out.", "rest", func():
+		if r.has("nat") and not _visit.is_empty():
+			_visit["carouse_line"] = "Last night: " + String(r["text"])
+			_build_visit_panel()
 		if bool(r.get("contact", false)):
 			_card({"id": "downtime-carouse", "title": "A night on the town", "kind": "good", "ok": true,
 				"text": String(r["text"]), "gold": int(r.get("coin", 0)), "art": "event-downtime-carouse"}, _on_inn_card_ack)
@@ -5018,28 +5111,36 @@ func _reopen_visit(s) -> void:
 	Downtime.restamp(party, s, stamp, s.last_visited)
 	Lodge.restamp(party, s, stamp, s.last_visited)
 
-# A bout in the pit: the city's bandit roster (hired blades — humanoid, always
-# fielded) cut to one champion by Downtime.pit_spec, fought in the square with
-# none of the road's aftermath — no band erased, no opinion moved, no spoils
-# page: a win banks what a fight banks (_bank: XP, the kill's gold, loot,
-# quest progress), then the purse and the deed are pit_result's, all on one
-# card, and the visit reopens behind it. A loss is carried out, not buried —
-# _retreat's revive without its gold or its walk; the house's stake is the
-# purse.
-func _pit_bout() -> void:
+# A bout in the pit: one hero the company puts in against one champion priced
+# for that hero (Downtime.pit_spec, #236 — it was the whole marching party
+# against a lone pumped foe), fought in the square with none of the road's
+# aftermath — no band erased, no opinion moved, no spoils page: a win banks
+# what a fight banks (_bank: XP, the kill's gold, loot, quest progress), then
+# the purse and the deed are pit_result's, all on one card, and the visit
+# reopens behind it. A loss is carried out, not buried — _retreat's revive
+# without its gold or its walk; the house's stake is the purse. For the bout
+# the hero is the whole marching order (Downtime.pit_line_up), so the board,
+# the XP and a trait earned are theirs alone; the order is put back as soon as
+# the bout is banked, torn down or not.
+func _pit_bout(char_id: String) -> void:
 	var s = _visit["settlement"]
 	var st: Dictionary = Downtime.pit_state(party, s, world)
 	if not st["open"]:
 		return
 	var bout: int = int(st["beaten"])
-	var base: Dictionary = encounter_spec(World.RoamingParty.new("%s-pit-%d" % [s.id, bout], s.position, "bandit"))
-	var spec: Dictionary = Downtime.pit_spec(party, s, world, bout, base)
+	var fighter = party.get_member(char_id)
+	if fighter == null or not fighter in Downtime.pit_fighters(party):
+		_say("Nobody in the company is fit to go in.")
+		return
+	var spec: Dictionary = Downtime.pit_spec(party, s, world, bout, fighter)
 	if spec.is_empty():
 		_say("Nobody stands in the pit tonight.")
 		return
 	_close_visit()
+	var order: Array = Downtime.pit_line_up(party, char_id)
 	var result: Dictionary = await _run_combat(spec, "normal", false, false, "town")
 	if result.is_empty():
+		Downtime.pit_stand_down(party, order)
 		return   # torn down mid-fight
 	var won: bool = String(result.get("outcome", "")) == "Victory"
 	if won:
@@ -5050,7 +5151,8 @@ func _pit_bout() -> void:
 		# not buried (no _apply_deaths on a loss), and come to here. The dead
 		# of earlier fights are not the pit's to give back.
 		Party.revive_downed(party, result.get("deaths", []))
-	var r: Dictionary = Downtime.pit_result(party, s, world, bout, won, int(st["week"]))
+	Downtime.pit_stand_down(party, order)
+	var r: Dictionary = Downtime.pit_result(party, s, world, bout, won, int(st["week"]), fighter.cname)
 	_autosave()
 	# The quest news a spoils page would have carried rides the card instead.
 	var text: String = String(r["text"])
@@ -5091,8 +5193,9 @@ func _build_lodge_page(box: VBoxContainer, s) -> void:
 	box.add_child(rest_btn)
 	if wait > 0.0:
 		_note(box, "They rested less than a day ago — another night does nothing for %s." % _hours(wait))
-	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _page_scroll_h(INN_LIST_H)))
+	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _visit_list_h))   # pinned, as the inn's is (#228)
 	box.add_child(scroll)
+	_visit_list = scroll
 	var rows: VBoxContainer = scroll.get_child(0)
 	_section(rows, "The rooms")
 	for room in Lodge.ROOMS:   # the order the map builds them in (SettlementKit.LODGE_ROOMS)

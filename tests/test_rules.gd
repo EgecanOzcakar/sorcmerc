@@ -514,15 +514,12 @@ func test_presets_have_no_pending_and_no_warnings() -> void:
 		for x in s.pending:
 			printerr("    %s pending: %s %s" % [ch.id, x["type"], x["key"]])
 		check(s.pending.is_empty(), "%s is fully decided (%d pending)" % [ch.id, s.pending.size()])
-		# bundle-choice warnings are the known v1 scope cut (spec §2.3): starting-equipment
-		# bundles are not exported, so every class emits them. Everything else must be clean.
-		var real: Array = []
+		# bundle-choice used to be let off here, the known v1 scope cut (spec §2.3):
+		# starting-equipment bundles are not exported, so every fighter and rogue
+		# carried them. #189 stopped them being warnings at all (pass_gear.gd).
 		for w in s.warnings:
-			if not w.begins_with("bundle-choice"):
-				real.append(w)
-		for w in real:
 			printerr("    %s warning: %s" % [ch.id, w])
-		check(real.is_empty(), "%s resolves with no warnings beyond bundle-choice (%d)" % [ch.id, real.size()])
+		check(s.warnings.is_empty(), "%s resolves with no warnings (%d)" % [ch.id, s.warnings.size()])
 
 # T34: a decided choice stays listed in `choice_points` (it only leaves `pending`),
 # and re-deciding it overwrites the old answer on the next resolve.

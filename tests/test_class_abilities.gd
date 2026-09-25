@@ -43,11 +43,12 @@ const RNG = preload("res://core/rng.gd")
 const LEVELS := [4, 8]
 const TEAM_SIZE := 4
 
-# The one warning a finished build is still allowed to carry: the export ships no
-# starting-equipment bundles, so barbarian/fighter/rogue's `bundle-choice` grants
-# can never resolve (SCHEMA gap #2). Gear is picked off the creator's own lists
-# instead, which is what a player does.
-const ALLOWED_WARNING := "starting-equipment bundles are not exported"
+# A finished build carries no resolver warning at all. It used to be allowed one
+# kind — barbarian/fighter/rogue's `bundle-choice` grants can never resolve, the
+# export ships no starting-equipment bundles (SCHEMA gap #2) — until #189 found
+# the creator's Review page reading them out to the player. Gear is picked off
+# the creator's own lists instead, which is what a player does, so it was never
+# a warning (core/rules/pass_gear.gd).
 
 var _pass := 0
 var _fail := 0
@@ -193,7 +194,7 @@ func audit_build(ch, lvl: int) -> void:
 	check(s.pending.is_empty(), "%s: every choice is made (%d left: %s)" % [who, s.pending.size(),
 		", ".join(s.pending.map(func(p): return String(p["type"])))])
 	for w in s.warnings:
-		check(w.contains(ALLOWED_WARNING), "%s: unexpected resolver warning — %s" % [who, w])
+		check(false, "%s: unexpected resolver warning — %s" % [who, w])
 
 	# 2. the level is the level. Every number a class feature scales by is read
 	# off one of these two, and they are computed by different code.

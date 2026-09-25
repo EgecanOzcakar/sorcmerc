@@ -563,6 +563,39 @@ static func boss_for(party_characters: Array, boss: Dictionary, seed: int = 0,
 		monsters.append_array(_build(maxf(rest, 0.0), order, MAX_FOES - count)["monsters"])
 	return {"monsters": monsters}
 
+# #236 — a duel: one foe against one hero, the pit's bout (core/downtime.gd).
+# Not a roster and not a budget. TIER, CURVE and REF_SCORE were all measured
+# on a party of three against a warband, and a party of one is neither — the
+# action-economy measurement in the header is exactly the thing a duel does not
+# have. So a duel is priced on core/rules/power.gd's ruler alone: the caller
+# names the score the champion should come to (Downtime.pit_champion says how,
+# and carries the sweep), and this finds the one foe that comes to it.
+#
+# The champion is whichever of `pool` sits nearest `target` on that ruler (in
+# proportion: a 20 against a 30 is as far as a 45 against a 30), then pumped
+# or eased by the same MULT knob a boss uses until it reaches the target — the
+# nearest, so the knob stays near 1 and a level-12 hero meets a veteran in
+# kind, not a bandit with +6 AC. Pure: the same target gets the same champion
+# every time. {"id", "count": 1, "mult"}; {} for an empty pool.
+static func duel_for(target: float, pool: Array) -> Dictionary:
+	target = maxf(1.0, target)
+	var best := ""
+	var best_gap := INF
+	for id in pool:
+		var score := _lead_score(String(id), 1, 1.0, [], false, 1)
+		if score <= 0.0:
+			continue
+		var gap: float = absf(log(target / score))
+		if gap < best_gap:
+			best_gap = gap
+			best = String(id)
+	if best == "":
+		return {}
+	var mult := MULT_MIN
+	while mult < BOSS_MULT_MAX and _lead_score(best, 1, mult, [], false, 1) < target:
+		mult += MULT_STEP
+	return {"id": best, "count": 1, "mult": snappedf(minf(mult, BOSS_MULT_MAX), 0.01)}
+
 static func _lead_score(id: String, count: int, mult: float, extras: Array, caster := false,
 		opponents := 0, cap := 9) -> float:
 	var roster: Array = []

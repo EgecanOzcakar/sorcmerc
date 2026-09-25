@@ -7,11 +7,13 @@
 #   for p in Leveling.pending(ch): ...  # render with creator.gd's choice statics
 #   Leveling.decide(ch, p["key"], d)
 #   Leveling.can_finalize(ch)
+#   Leveling.left_to_choose(ch)       # the open choices, in words, for a page that will not close
 extends RefCounted
 
 const Save = preload("res://core/character_save.gd")
 const Ach = preload("res://core/achievements.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const ChoicePick = preload("res://core/rules/choice_pick.gd")
 
 # hp_roll sentinel: the resolver substitutes die/2+1 (spec §4, save format's -1).
 const AVERAGE := -1
@@ -114,6 +116,44 @@ static func grant_levels(ch, target_level: int, class_id := "") -> void:
 
 static func pending(ch) -> Array:
 	return ch.sheet().pending
+
+# #235 ("wht choice is left"): what is still open on the build, one short
+# name each, in the resolver's order — "Cleric cantrips (pick 3)", "Fighter
+# subclass". The level-up and settle-in pages used to refuse Confirm with
+# "2 choice(s) still unmade." and nothing else: a count, and a page that
+# scrolls past a card and a 430-pixel climb before the rows it meant. Named,
+# the refusal says where to look, and the page lists them over the rows.
+static func left_to_choose(ch) -> Array[String]:
+	var sheet = ch.sheet()
+	var open := {}
+	for pe in sheet.pending:
+		open[String(pe["key"])] = true
+	var out: Array[String] = []
+	for p in sheet.choice_points:
+		if open.has(String(p["key"])):
+			out.append(choice_name(p))
+	return out
+
+static func choice_name(p: Dictionary) -> String:
+	var src := ChoicePick.humanize(String(p.get("source", {}).get("id", "")))
+	var n := ChoicePick.pick_count(p)
+	var what: String
+	match String(p["type"]):
+		"spell-choice":
+			what = "cantrips" if int(p.get("spellLevel", 1)) == 0 else "level %d spells" % int(p.get("spellLevel", 1))
+		"subclass": what = "subclass"
+		"asi": what = "ability score increase"
+		"feat-choice": what = "feat"
+		"feature-choice": what = "option"
+		"fighting-style-choice": what = "fighting style"
+		"weapon-mastery-choice": what = "weapon masteries"
+		"skill-choice": what = "skills"
+		"expertise-choice": what = "expertise"
+		"language-choice": what = "languages"
+		"tool-choice": what = "tools"
+		_: what = ChoicePick.humanize(String(p["type"])).to_lower()
+	var name := ("%s %s" % [src, what]).strip_edges()
+	return name + ("  (pick %d)" % n if n > 1 and p["type"] != "asi" else "")
 
 static func decide(ch, key: String, decision: Dictionary) -> void:
 	ch.decide(key, decision)

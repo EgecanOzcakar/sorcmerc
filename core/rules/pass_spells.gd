@@ -19,6 +19,39 @@ const THIRD_CASTERS := {
 	"eldritchknight": {"ability": "int", "classId": "fighter"},
 }
 
+# #246 — a spell a species or a feat hands you is yours to cast ONCE PER LONG
+# REST WITHOUT A SLOT (2024 PHB: Fiendish Legacy, Elven Lineage, Gnomish
+# Lineage, Fey Touched, Shadow Touched all say it in the same words), and with
+# a slot of the right level besides if you have one. The export writes these as
+# plain `alwaysPrepared` spell grants with nothing to say where they came from,
+# so the grant's bundle ORIGIN is what marks them. Only leveled spells: a
+# cantrip needs no slot to begin with. A subclass's always-prepared list is not
+# innate — it is prepared, and paid for with slots like any other spell.
+const INNATE_ORIGINS := ["species", "feat"]
+const INNATE_POOL_PREFIX := "innate-"
+const INNATE_USES := 1   # "once ... per Long Rest"
+
+# The pool that holds `sid`'s free cast. resolve.gd grants it (max 1, long-rest),
+# so adapter.gd carries it into the fight, writes it back and refills it the
+# same way it does every other pool.
+static func innate_pool(sid: String) -> String:
+	return INNATE_POOL_PREFIX + sid
+
+# A spell grant from a species or feat with no class to name its ability (a
+# tiefling fighter's Hellish Rebuke) still needs one for its DC and its attack
+# roll. RAW the player picks INT, WIS or CHA when they take the species or feat.
+# ponytail: the export records no such choice, so the best of the three is
+# what is used — the one any player would pick. When a choice grant exists,
+# read it instead.
+const INNATE_ABILITIES := ["int", "wis", "cha"]
+
+static func _best_innate_ability(abilities: Dictionary) -> String:
+	var best := "cha"
+	for a in INNATE_ABILITIES:
+		if int(abilities[a]["mod"]) > int(abilities[best]["mod"]):
+			best = a
+	return best
+
 static func _third_caster(bundles: Array) -> Dictionary:
 	for b in bundles:
 		if b["source"]["origin"] == "subclass" and THIRD_CASTERS.has(b["source"]["id"]):
@@ -51,6 +84,8 @@ static func resolve(bundles: Array, abilities: Dictionary, pb: int, level: int) 
 	if class_id == "" and not third.is_empty():
 		ability = third["ability"]
 		class_id = third["classId"]
+	if ability == "" and not spells.is_empty():
+		ability = _best_innate_ability(abilities)   # #246: see INNATE_ABILITIES
 	if ability != "":
 		ability_mod = int(abilities[ability]["mod"])
 	var save_dc: int = 8 + pb + ability_mod if ability != "" else 0
@@ -59,9 +94,13 @@ static func resolve(bundles: Array, abilities: Dictionary, pb: int, level: int) 
 	var cantrips: Array = []
 	var known: Array = []
 	var always: Array = []
+	var innate: Array = []
 	var overrides := {}
 	for tg in spells:
 		var g: Dictionary = tg["grant"]
+		if g["alwaysPrepared"] and String(tg["source"]["origin"]) in INNATE_ORIGINS \
+				and int(Catalog.spell(g["spellId"]).get("level", 0)) > 0 and not g["spellId"] in innate:
+			innate.append(g["spellId"])   # before the dedupe: a class that also knows it keeps the free cast
 		if g.has("ability") and g["ability"] != ability:
 			overrides[g["spellId"]] = g["ability"]
 		var def := Catalog.spell(g["spellId"])
@@ -122,7 +161,7 @@ static func resolve(bundles: Array, abilities: Dictionary, pb: int, level: int) 
 		"cantrips": cantrips, "cantrips_known": cantrips_known,
 		"known": known, "spells_known": spells_known,
 		"always_prepared": always, "prepared_count": prepared_count,
-		"ability_overrides": overrides,
+		"ability_overrides": overrides, "innate": innate,
 	}, "warnings": warns}
 
 static func _single_class(bundles: Array) -> bool:

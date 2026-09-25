@@ -107,6 +107,12 @@ static func resolve(ch) -> Resolved:
 	var pl := PassPools.resolve(b)
 	r.pools = pl["pools"]
 	r.warnings.append_array(pl["warnings"])
+	# #246: each species/feat spell's free cast is a pool of one, back on a Long
+	# Rest — so every path that already carries pools (the fight, write_back,
+	# rest, the save file, the co-op hash) carries this one with no new code.
+	for sid in r.spellcasting.get("innate", []):
+		r.pools.append({"id": PassSpells.innate_pool(sid), "max": PassSpells.INNATE_USES,
+			"regen": "long-rest", "die_size": 0, "source": {"origin": "innate", "id": sid}})
 
 	# features and resistances
 	for tg in Bundles.of_type(b, "feature"):

@@ -4,6 +4,8 @@
 #
 #   const Sound = preload("res://core/audio.gd")
 #   Sound.play_sfx("hit")                  one-shot, ids = assets/audio/sfx/*.wav
+#   Sound.play_sfx_then("hit_sword", ["down", "kill"])   #244: the blow, then
+#                                          what it did, once the blow has landed
 #   Sound.play_bark("hero1")               T31 voice stinger, assets/audio/barks/*.wav
 #   Sound.play_sting("music_discovery")    a short musical phrase over the bed,
 #                                          assets/audio/sfx/music_*.wav on the Music bus
@@ -71,6 +73,41 @@ const PITCH_DRIFT := 0.06
 static func play_sfx(id: String) -> void:
 	if _i != null:
 		_i._play_one_shot(_i._take_of(SFX_DIR, id), randf_range(1.0 - PITCH_DRIFT, 1.0 + PITCH_DRIFT))
+
+# #244: a sound and the sounds it causes, in that order. A killing blow used to
+# play the death and the kill sting in the same frame as the damage and no
+# weapon at all, so the last swing of a fight was the one swing you never heard
+# land. Now `first` (the weapon) starts at once and `after` (the fall, the kill
+# sting, a victory) starts FOLLOW_GAP later — see follow_gap() for how long.
+static func play_sfx_then(first: String, after: Array) -> void:
+	if _i == null:
+		return
+	var path: String = _i._take_of(SFX_DIR, first)
+	_i._play_one_shot(path, randf_range(1.0 - PITCH_DRIFT, 1.0 + PITCH_DRIFT))
+	if after.is_empty():
+		return
+	var s = _i._stream(path, false)
+	var gap := follow_gap(s.get_length() if s != null else 0.0,
+		OS.get_environment("SORCMERC_FAST") != "")
+	if gap <= 0.0:
+		for id in after:
+			play_sfx(String(id))
+		return
+	_i.get_tree().create_timer(gap).timeout.connect(func():
+		for id in after:
+			play_sfx(String(id)))
+
+# How long the follow-up waits: the whole of a short take (a bow's 0.2 s thwack),
+# but no more than FOLLOW_MAX of a long one. The generated hit takes run 0.2 to
+# 3.2 s and nearly all of that past the first few tenths is ring-out; waiting
+# for the tail of hit_slam_3 would put a death three seconds behind the blow
+# that caused it, which reads as two unrelated events. SORCMERC_FAST is no
+# wait at all, like every other cosmetic delay under it.
+const FOLLOW_MAX := 0.45
+static func follow_gap(first_len: float, fast := false) -> float:
+	if fast:
+		return 0.0
+	return clampf(first_len, 0.0, FOLLOW_MAX)
 
 # T31: the gibberish stinger paired with a text bark. Same voices/bus as the SFX.
 static func play_bark(id: String) -> void:

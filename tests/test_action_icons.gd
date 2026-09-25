@@ -155,6 +155,32 @@ func _init() -> void:
 		check(Icons.skill_icon({"id": "nothing-like-this", "kind": "dodge"})
 			== Icons.verb_icon("dodge"),
 			"a skill with no art of its own falls back to its kind")
+		# #241: the Attack button wears the weapon it will swing, the off-hand
+		# swing its own, and a thrown javelin is still the javelin. Real builds,
+		# so a change to how pass_gear ids an attack shows up here.
+		var Adapter = load("res://core/adapter.gd")
+		var Presets = load("res://core/presets.gd")
+		var vera = Adapter.to_combatant(Presets.vera(), "party", Vector2i.ZERO)   # longsword
+		var atk := {"id": "attack", "kind": "attack"}
+		check(Icons.weapon_icon("longsword") != null, "the longsword has item art to wear")
+		check(Icons.skill_icon(atk, vera) == Icons.weapon_icon(String(vera.attacks[0]["id"])),
+			"Vera's Attack wears her %s" % vera.attacks[0]["id"])
+		check(Icons.skill_icon(atk, vera) != Icons.verb_icon("attack"), "...not the generic sword")
+		check(Icons.skill_icon(atk) == Icons.verb_icon("attack"),
+			"with nobody to ask, Attack keeps the generic badge")
+		if Adapter.set_main_attack(vera, "handaxe"):
+			check(Icons.skill_icon(atk, vera) == Icons.weapon_icon("handaxe"),
+				"swapping the main hand swaps the badge")
+		var pike = Adapter.to_combatant(Presets.pike(), "party", Vector2i.ZERO)   # shortbow
+		check(Icons.skill_icon(atk, pike) == Icons.item_art("shortbow"), "Pike's Attack wears the shortbow")
+		check(Icons.weapon_icon("javelin-thrown") == Icons.weapon_icon("javelin")
+			and Icons.weapon_icon("javelin") != null, "a thrown javelin is the javelin")
+		check(Icons.weapon_icon("unarmed-strike") == null and Icons.weapon_icon("") == null,
+			"no weapon, no art: the caller keeps its badge")
+		check(Icons.skill_icon({"id": "offhand_attack", "kind": "offhand_attack", "weapon": "dagger"})
+			== Icons.item_art("dagger"), "the off-hand swing wears the off-hand weapon")
+		check(Icons.skill_icon({"id": "monk-flurry-of-blows:attack", "kind": "attack"}, vera)
+			== Icons.verb_icon("attack"), "a granted attack keeps its own badge, not the main hand's")
 		var btn := Button.new()
 		Icons.icon_button(btn, Icons.verb_icon("dash"))
 		check(btn.icon != null, "icon_button hangs the badge on the button")

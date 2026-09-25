@@ -17,6 +17,7 @@ extends RefCounted
 const Adapter = preload("res://core/adapter.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Ach = preload("res://core/achievements.gd")
+const PassSpells = preload("res://core/rules/pass_spells.gd")
 
 const SWIFT_MULT := 1.4   # a forced march's ground, without its -2 on the road
 
@@ -40,8 +41,17 @@ static func known(party, ch) -> Array:
 	var out: Array = []
 	for sid in ROAD:
 		if party.get_script()._knows(ch, sid):
-			out.append({"id": sid, "level": level(sid), "castable": slot_for(ch, level(sid)) >= 0})
+			out.append({"id": sid, "level": level(sid),
+				"castable": free_left(ch, sid) > 0 or slot_for(ch, level(sid)) >= 0})
 	return out
+
+# #246: a wood elf's Longstrider is free once per Long Rest, here as in a fight
+# — the same pool (PassSpells.innate_pool), spent first. 0 when `sid` is not
+# one of `ch`'s species/feat spells.
+static func free_left(ch, sid: String) -> int:
+	var pid := PassSpells.innate_pool(sid)
+	var mx: int = ch.sheet().pool_max(pid)
+	return clampi(int(ch.pools.get(pid, mx)), 0, mx)
 
 # Index of the lowest unspent slot at or above `lvl`, or -1.
 static func slot_for(ch, lvl: int) -> int:
@@ -53,12 +63,16 @@ static func slot_for(ch, lvl: int) -> int:
 
 static func cast(party, ch, sid: String, now: float) -> String:
 	var m: Dictionary = ROAD.get(sid, {})
+	var free := free_left(ch, sid) > 0
 	var i := slot_for(ch, level(sid))
-	if m.is_empty() or i < 0:
+	if m.is_empty() or (i < 0 and not free):
 		return ""
-	while ch.slots_used.size() < 9:
-		ch.slots_used.append(0)
-	ch.slots_used[i] += 1
+	if free:
+		ch.pools[PassSpells.innate_pool(sid)] = free_left(ch, sid) - 1
+	else:
+		while ch.slots_used.size() < 9:
+			ch.slots_used.append(0)
+		ch.slots_used[i] += 1
 	ch.dirty()
 	Ach.unlock("road_spell")
 	if bool(m.get("hold", false)):
