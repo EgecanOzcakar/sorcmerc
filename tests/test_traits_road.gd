@@ -145,11 +145,11 @@ func test_the_purse() -> void:
 	var m := {"markup": 1.0}
 	var gen := _party([_hero("g", ["generous"])])
 	var none := _party([_hero("g")])
-	var full: int = Visit.sell_price(m, "longsword", none)
-	var cheap: int = Visit.sell_price(m, "longsword", gen)
+	var full: int = Visit.sell_price(m, "plate", none)
+	var cheap: int = Visit.sell_price(m, "plate", gen)
 	check(full > 1 and cheap < full and absi(cheap - int(round(full * 0.9))) <= 1,
 		"a Generous hero lets things go 10%% cheaper: %d vs %d" % [cheap, full])
-	check(Visit.sell_price(m, "longsword") == full, "...and nobody else's price moves")
+	check(Visit.sell_price(m, "plate") == full, "...and nobody else's price moves")
 
 func test_opinion() -> void:
 	var b := _hero("a", ["brave"])

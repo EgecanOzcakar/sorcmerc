@@ -582,7 +582,7 @@ func _card(sm: Dictionary) -> Control:
 	if sm.get("dead", false):   # #109: say so, and say what brings them back
 		bench.text = "Dead"
 		bench.disabled = true
-		bench.tooltip_text = "Dead. A settlement healer raises them for %d ◉; so does a Revivify caster with a 3rd-level slot, or a Scroll of Resurrection." % Party.REVIVE_COST
+		bench.tooltip_text = "Dead. A settlement healer raises them for %d ◉ (%d ◉ a level); so does a Revivify caster with a 3rd-level slot, or a Scroll of Resurrection, at the same price." % [Party.revive_cost(party.get_member(sm["id"])), Party.REVIVE_PER_LEVEL]
 	bench.pressed.connect(func():
 		if roster_locked:
 			return

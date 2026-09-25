@@ -332,7 +332,35 @@ const TERMINAL := ["won", "lost", "retired"]
 # priced by item_price() below. No haggling, no stock depletion.
 const STOCK := ["shortsword", "longsword", "greataxe", "shortbow", "leather", "chain-shirt", "shield"]
 const SCROLL := "scroll-of-resurrection"
-const SELL_RATE := 0.5
+# What a shop pays for the party's goods, as a share of list. It was 0.5, and
+# loot drowned coin: a magic item is priced by rarity (400 ◉ uncommon, 2,025
+# rare, 6,400 very rare) and core/loot.gd opens those shelves by CR, so from the
+# Frontier out one fight's loot sold for two to three times its purse, and past
+# level ~8 the purse stopped mattering (the design audit §5.1). The owner's call
+# was a fence's price, 10-20% of list; 0.2 is the top of that, because the
+# other half of the same pass makes a magic item worth WEARING
+# (data/effects/items.json), so selling one is now a choice with a cost on both
+# sides rather than the only thing to do with it.
+#
+# ESTIMATED, not measured in play: coin and loot per easy open-country fight,
+# the ruler party at each level, 200 pinned rosters a row (Scaler.roster_for at
+# Regions.ref_score(L), Loot.for_kills on each, list prices summed:
+# tests/sweep_economy.gd, 2026-09-25), after the scroll and potion fixes in
+# PRICE_OVERRIDE and core/loot.gd:
+#
+#   level  coin  loot list  sold at 0.5   sold at 0.2
+#     1     7 ◉     18 ◉     9 (1.2x)      4 (0.5x)
+#     3    18       29      14 (0.8x)      6 (0.3x)
+#     6    41       51      26 (0.6x)     10 (0.2x)
+#     8    51      131      65 (1.3x)     26 (0.5x)
+#    10    62      230     115 (1.9x)     46 (0.7x)
+#    15    91      567     284 (3.1x)    113 (1.2x)
+#    19   118      788     394 (3.4x)    158 (1.3x)
+#
+# So loot is now about the purse again in the Deeps and under half of it
+# before the Frontier, where it used to be three purses. A friendly town pays
+# up to 40% over this (SettlementVisit.sell_price, audit §5.6).
+const SELL_RATE := 0.2
 const BIG_SPENDER_GP := 1000   # T19: merchant spend in one run that earns big_spender
 
 # T25 — a merchant node is a settlement. Everyone has a Generalist (STOCK above,
@@ -542,12 +570,14 @@ func _conclude() -> void:
 			say("%s is carried home and revived." % ch.id)
 	Party.auto_revive_all(party)
 
-# Revivify or a Scroll of Resurrection, 300 gp either way. The scene's button.
+# Revivify or a Scroll of Resurrection, Party.revive_cost either way (50 ◉ a
+# level, the design audit §5.2). The scene's button.
 func resurrect(dead_id: String, method: String, caster_id: String = "") -> bool:
 	var Party = load("res://core/party.gd")
+	var cost: int = Party.revive_cost(party.get_member(dead_id))
 	if not Party.resurrect(party, dead_id, method, caster_id):
 		return false
-	say("%s is brought back at 1 HP (−%d ◉)." % [dead_id, Party.REVIVE_COST])
+	say("%s is brought back at 1 HP (−%d ◉)." % [dead_id, cost])
 	_autosave()
 	return true
 
@@ -1078,7 +1108,7 @@ func turn_in(quest: Dictionary) -> bool:
 	# now resolves where accepting only reaches.
 	Sound.play_sfx("quest_complete")
 	var gold: int = int(quest["reward"].get("gold", 0))
-	say("Quest complete: %s (+%d ◉, +%d XP)" % [quest["title"], gold, gold * Quest.XP_PER_GOLD])
+	say("Quest complete: %s (+%d ◉, +%d XP)" % [quest["title"], gold, Quest.xp_reward(quest)])
 	_autosave()
 	return true
 
@@ -1108,8 +1138,18 @@ const VARIES_TIER := 2        # "varies" items (no single rarity) price as rare
 # inn (the design audit, docs/audit-game-design.md §1.4). 50 ◉ is the 2024
 # PHB's price for a Potion of Healing, the grade this game grants. Checked
 # before anything else, so a flat price wins over costGp and rarity alike.
+#
+# The Scroll of Identification is the other one, for the loot's sake: the export
+# files it "uncommon", so it priced at 400 ◉, while core/loot.gd drops it from
+# the COMMON band as the one thing a CR 1/8 kill can be carrying. At 400 it was
+# most of what an early fight was worth (a level-1 fight's loot read ~11x its
+# coin at the old half-list sale, the design audit §5.1), and burning one cost
+# seven times the librarian's 60 ◉ identify. 100 ◉ is the 2024 DMG's price for
+# a common item, the tier a 1st-level spell scroll sits in, and keeps the
+# librarian the cheaper door, as IDENTIFY_FEE_GP says it should be.
 const PRICE_OVERRIDE := {
 	"potions-of-healing": 50,
+	"scroll-of-identification": 100,
 }
 
 static func item_data(item_id: String) -> Dictionary:
