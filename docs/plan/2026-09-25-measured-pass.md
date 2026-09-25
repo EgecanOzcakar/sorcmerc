@@ -206,7 +206,10 @@ does, the audit's own remedy, so nothing moved.
 `tests/test_scaler.gd` and the region rows are byte-for-byte master: the
 preset trio carries no Quickened, no potion and no bond, and neither sweep
 reads the wounds curve (`sweep_regions` CELLS 3:3, 3:6, 8:8 at 200 seeds:
-96.5 / 28.0 / 96.5% on both). FULLSUITE
+96.5 / 28.0 / 96.5% on both). test_scaler, 200 seeds a tier, prints the same
+numbers on both, line for line: 96.5 / 93.0 / 81.5% at level 3, 96.0 / 84.0 /
+78.0% at level 8, boss pool 72.0%. The full suite (`tools/run_tests.sh`,
+after merging master at 03ca4ba) is 186 passed, 0 failed.
 
 Not visible: no screen changed, so no screenshot. Tests:
 `tests/test_world_threat.gd` (the flattened curve: a half-HP company meets the
