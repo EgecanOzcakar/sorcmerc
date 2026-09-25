@@ -155,6 +155,27 @@ func _screen() -> void:
 	scr.commit()
 	check(ch.level() == 4, "commit adds the level")
 	check(ch.sheet().max_hp > before, "committing raises max HP")
+	# #235 ("wht choice is left"): Done with a choice open names it, not a count,
+	# and the page lists what is left over the rows, ahead of the climb.
+	var left: Array = Leveling.left_to_choose(ch)
+	check(left.size() == Leveling.pending(ch).size() and not left.is_empty(), "every open choice has a name (%s)" % [left])
+	check(left.has("Fighter ability score increase"), "...in words: %s" % [left])
+	var early := [false]
+	scr.finished.connect(func(_l): early[0] = true, CONNECT_ONE_SHOT)
+	scr._on_confirm()
+	check(not early[0] and scr._status.text == "Still to choose: %s." % ", ".join(left),
+		"Done refuses, and says which: %s" % scr._status.text)
+	var listed: Label = scr._body.find_child("LeftToChoose", false, false)
+	check(listed != null and listed.text == ", ".join(left), "the page lists them over the rows")
+	var climb_at := -1
+	var first_open := -1
+	for i in scr._body.get_child_count():
+		var c = scr._body.get_child(i)
+		if climb_at < 0 and c.get_class() != "Label" and c.get_class() != "PanelContainer" and c.get_class() != "HFlowContainer":
+			climb_at = i
+		if first_open < 0 and c is Label and c.has_meta("choice_key"):
+			first_open = i
+	check(first_open >= 0 and (climb_at < 0 or first_open < climb_at), "the open rows come before the climb (%d, %d)" % [first_open, climb_at])
 	var seen := 0
 	for _step in 40:
 		var pend: Array = Leveling.pending(ch)

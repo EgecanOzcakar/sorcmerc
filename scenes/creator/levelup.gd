@@ -55,6 +55,7 @@ var _locked: Dictionary = {}
 # prepare page. So a spell choice stays editable however old it is.
 const LIVE_TYPES := ["spell-choice"]
 var _body: VBoxContainer
+var _scroll: ScrollContainer
 var _title := Label.new()
 var _status := Label.new()
 var _confirm := Button.new()
@@ -115,14 +116,14 @@ func _build_chrome() -> void:
 	_title.theme_type_variation = "Title"
 	root.add_child(_title)
 
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	root.add_child(scroll)
+	_scroll = ScrollContainer.new()
+	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	root.add_child(_scroll)
 	_body = VBoxContainer.new()
 	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_body.add_theme_constant_override("separation", 10)
-	scroll.add_child(_body)
+	_scroll.add_child(_body)
 
 	_status.add_theme_color_override("font_color", COL_WARN)
 	root.add_child(_status)
@@ -162,7 +163,9 @@ func _on_confirm() -> void:
 		commit()
 		return
 	if not Leveling.can_finalize(_ch):
-		_status.text = "%d choice(s) still unmade." % Leveling.pending(_ch).size()
+		# #235: which ones, not how many — and the page brought to the first.
+		_status.text = "Still to choose: %s." % ", ".join(Leveling.left_to_choose(_ch))
+		_show_first_open()
 		return
 	if _recruit and hire_check.is_valid():
 		var why: String = hire_check.call()
@@ -208,8 +211,8 @@ func _render() -> void:
 		_confirm.text = "Done"
 		_cancel.text = "Close"
 		_gains_panel(Leveling.gains(_before, _ch.sheet()))
+		_choices()   # #235: under the card, not under the 430-pixel climb, as settling in has it
 		_climb_panel()
-		_choices()
 	else:
 		_title.text = "%s — %s %d → %d" % [_ch.cname, Creator.humanize(cls),
 			_ch.level(), _ch.level() + 1]
@@ -332,6 +335,10 @@ func _choices() -> void:
 	var sheet = _ch.sheet()
 	if Leveling.pending(_ch).is_empty():
 		_head("Nothing left to choose")
+	else:
+		# #235: what is still open, named, over the rows that open it.
+		_head("Left to choose")
+		_note(", ".join(Leveling.left_to_choose(_ch)), COL_WARN).name = "LeftToChoose"
 	# This level's choices first, in the resolver's order (a made one keeps its
 	# place and stays editable, T34). What earlier levels spent comes after,
 	# under its own caption and dimmed: it is here to be read, not to be
@@ -372,7 +379,8 @@ func _choice_row(p: Dictionary, sheet, locked: bool) -> void:
 		_body.add_child(l)
 		return
 	var done: bool = p.get("decided", false)
-	_head("%s%s — pick %d" % ["✓ " if done else "", kind, n] + ("" if done else "  (%d of %d)" % [picks.size(), n]))
+	_head("%s%s — pick %d" % ["✓ " if done else "", kind, n] + ("" if done else "  (%d of %d)" % [picks.size(), n])) \
+		.set_meta("choice_key", p["key"])
 	_note("from %s %s%s" % [src["origin"], Creator.humanize(src["id"]),
 		"  ·  chosen — click to change" if done else ""])
 	var f := HFlowContainer.new()
@@ -411,15 +419,27 @@ func _choice_row(p: Dictionary, sheet, locked: bool) -> void:
 		b.set_meta("choice_key", p["key"])   # which choice this answers, for tests
 		f.add_child(b)
 
-func _head(text: String) -> void:
+func _head(text: String) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.theme_type_variation = "Head"
 	_body.add_child(l)
+	return l
 
-func _note(text: String, col: Color = COL_DIM) -> void:
+func _note(text: String, col: Color = COL_DIM) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	l.add_theme_color_override("font_color", col)
 	_body.add_child(l)
+	return l
+
+# The first open choice's heading, scrolled into view (#235).
+func _show_first_open() -> void:
+	var open := {}
+	for pe in Leveling.pending(_ch):
+		open[String(pe["key"])] = true
+	for c in _body.get_children():
+		if c is Label and c.has_meta("choice_key") and open.has(String(c.get_meta("choice_key"))):
+			_scroll.ensure_control_visible(c)
+			return
