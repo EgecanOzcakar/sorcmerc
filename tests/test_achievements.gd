@@ -285,7 +285,7 @@ func test_party_wiring() -> void:
 	_wipe()
 	var p := _party()
 	p.get_member("vera").dead = true
-	p.add_gold(Party.REVIVE_COST)
+	p.add_gold(Party.revive_cost(p.get_member("vera")))
 	p.stash_add(Party.REVIVE_SCROLL)
 	check(not Ach.is_unlocked("resurrect_ally"), "nobody raised yet")
 	check(Party.resurrect(p, "vera", "scroll"), "the scroll works")

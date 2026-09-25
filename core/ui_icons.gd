@@ -10,6 +10,7 @@ extends RefCounted
 
 const Catalog = preload("res://core/rules/catalog.gd")
 const PassGear = preload("res://core/rules/pass_gear.gd")
+const PassItems = preload("res://core/rules/pass_items.gd")   # what a worn magic item does
 const Sound = preload("res://core/audio.gd")
 
 
@@ -802,8 +803,11 @@ static func item_tooltip(item_id: String, def: Dictionary, kind: String) -> Stri
 			if int(def.get("strengthRequirement", 0)) > 0:
 				lines.append("Needs Str %s" % def["strengthRequirement"])
 		_:
+			# JSON hands the flag back as a bool, and str(true) is "true", so the
+			# old == "True" never matched and no tooltip ever said attunement.
+			var attune = def.get("attunement", false)
 			lines.append(str(def.get("rarity", "")).capitalize()
-				+ (", attunement" if str(def.get("attunement", "False")) == "True" else ""))
+				+ (", attunement" if attune == true or str(attune) == "True" else ""))
 			var desc := str(def.get("description", "")).strip_edges()
 			if desc != "":
 				lines.append("")
@@ -811,6 +815,13 @@ static func item_tooltip(item_id: String, def: Dictionary, kind: String) -> Stri
 	var cost := str(def.get("costGp", ""))
 	if cost != "" and cost != "None":
 		lines.append("%s ◉" % cost)
+	# What wearing it does, in the game's own numbers (data/effects/items.json),
+	# above the SRD prose; and saying so plainly when it does nothing yet, so a
+	# description of a power the engine does not model is not read as a promise.
+	if PassItems.is_magic_item(item_id) and String(Catalog.magic_item(item_id).get("category", "")) != "potion":
+		var fx := PassItems.entry(item_id)
+		lines.insert(1, ("Worn: %s" % String(fx.get("text", ""))) if not fx.is_empty()
+			else "Worn: does nothing in a fight yet")
 	return "\n".join(lines)
 
 # A square art tile with the hover text; the caller wires `pressed`. `caption`

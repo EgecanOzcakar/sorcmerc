@@ -5,7 +5,7 @@
 # anything. These are the things that take days, from the table 5e keeps for
 # exactly this question:
 #
-#   Downtime.train(party, world, s, ch, "sentinel")   # a feat, five days, once per hero
+#   Downtime.train(party, world, s, ch, "sentinel")   # a feat, five days, once a tier per hero
 #   Downtime.carouse(party, world, s)                 # a night on the town: a contact, a lead, or a story
 #   Downtime.gamble(party, world, s, 50)              # a stake and a roll; an evening, once a day a town
 #   Downtime.craft(party, world, s, "potion-of-speed", m)   # the alchemist's bench / the librarian's desk
@@ -15,7 +15,7 @@
 # nat, bonus, dc, text, ...} and the screen shows it the way it shows
 # work_healer(): a line under the row, and a card when there is a
 # complication. State lives on party.downtime (saved beside callings):
-#   {"trained": [char_id], "gambled_day": {s.id: world-day},
+#   {"trained": [char_id, once per feat], "gambled_day": {s.id: world-day},
 #    "crafted": {s.id: {item_id: last_visited}}, "pit": {s.id: {"week", "beaten"}}}
 # Days go through spend_days(): the clock moves, the party sleeps, the bed is
 # paid. The complication is the anti-grind: a fail is a small story, never
@@ -38,10 +38,27 @@ const Abilities = preload("res://core/rules/pass_abilities.gd")
 const DAY := 1440.0   # world-minutes
 
 # A feat is a level's worth; five days is two raid clocks.
+#
+# 2026-09-25 (the design audit §5.1, "sinks that scale with level"): a hero
+# used to train once, ever, so the one sink that grew with level was spent by
+# level 5 and never offered again. Now a hero may train once per TRAIN_EVERY
+# levels from TRAIN_MIN_LEVEL — at 4, 8, 12, 16 and 20, one feat each — and each
+# is priced at the hero's level then, so it is a purchase at every tier of the
+# run, not one at the start of it. The fee climbs 100 ◉ a level: ESTIMATED
+# against an easy open-country purse (Campaign.SELL_RATE's table), the level-4
+# feat is 550 ◉ (~26 fights' coin), the level-8 950 (~19), the level-12 1,350
+# (~18), the level-16 1,750 (~19), the level-20 2,150 (~17) — the same weight
+# each time.
+#
+# The extra feats are real power, and priced as such: a feat lands on the sheet
+# (bundles.gd step 9), so core/rules/power.gd reads its +1 and whatever else it
+# grants, and the fights the company is sent grow to match. The general feats
+# the trainer finishes (trainable) are the ones with no choice left to make.
 const TRAIN_COST_BASE := 150
-const TRAIN_COST_PER_LEVEL := 50
+const TRAIN_COST_PER_LEVEL := 100
 const TRAIN_DAYS := 5
 const TRAIN_MIN_LEVEL := 4
+const TRAIN_EVERY := 4
 const TRAIN_CATEGORY := "general"
 # A night at the inn, and the drinks. The road's DC; half a job's opinion.
 const CAROUSE_COST := {"city": 30, "town": 20, "camp": 10}
@@ -129,8 +146,18 @@ static func spend_days(party, world, s, days: int) -> int:
 
 # --- training -------------------------------------------------------------
 
+# `trained` holds a hero's id once per feat trained (a save from before
+# 2026-09-25 holds it at most once, which reads as the first tier's feat).
+static func trained_count(party, ch) -> int:
+	return Array(party.downtime.get("trained", [])).count(ch.id) if ch != null else 0
+
+# How many feats a hero of this level may have trained by now: one at
+# TRAIN_MIN_LEVEL and one more every TRAIN_EVERY levels after it.
+static func trains_allowed(level: int) -> int:
+	return 0 if level < TRAIN_MIN_LEVEL else 1 + (level - TRAIN_MIN_LEVEL) / TRAIN_EVERY
+
 static func can_train(party, ch) -> bool:
-	return ch != null and ch.level() >= TRAIN_MIN_LEVEL and not ch.id in party.downtime.get("trained", [])
+	return ch != null and trained_count(party, ch) < trains_allowed(ch.level())
 
 static func train_cost(ch) -> int:
 	return TRAIN_COST_BASE + TRAIN_COST_PER_LEVEL * ch.level()

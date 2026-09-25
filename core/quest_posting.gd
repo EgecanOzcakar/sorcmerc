@@ -163,6 +163,10 @@ static func offers(s, services: Array, party, world = null) -> Array:
 	var world_jobs: Array = []
 	if world != null:
 		world_jobs = Quest.world_quest_offers(world, s, party, RNG.new(maxi(1, absi(hash(s.id)))))
+	# Audit §5.3: a job's XP is this country's fights' worth (Quest.XP_FIGHTS),
+	# read once for the whole board: the level a fight here is pinned to.
+	var fight_xp: int = Regions.fight_xp(Regions.level_here(world, s.position, party)
+		if world != null else Regions.party_level(party))
 	var out: Array = []
 	var seen := {}
 	for kind in Quest.KINDS:
@@ -179,9 +183,12 @@ static func offers(s, services: Array, party, world = null) -> Array:
 				q["counter"] = counter
 				Contracts.stamp(q, s.faction)
 				# Renown's premium, and this people's regard: a famous company
-				# charges more everywhere, a liked one here.
+				# charges more everywhere, a liked one here. The gold only — what
+				# a job teaches does not grow with who is paying for it.
 				if q.has("reward") and q["reward"].has("gold"):
 					q["reward"]["gold"] = int(int(q["reward"]["gold"]) * Ladder.pay_mult() * Contracts.pay_mult(s.faction))
+				if q.has("reward"):
+					q["reward"]["xp"] = Quest.xp_for(String(q["kind"]), fight_xp, int(q.get("chain_tier", 0)))
 				out.append(q)
 	return out
 

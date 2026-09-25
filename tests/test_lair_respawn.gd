@@ -28,6 +28,31 @@ func a_world():
 	w.add_lair(World.Lair.new("goblin-warren", Vector2(300, 100), "goblinoid"))
 	return w
 
+# The design audit §5.4: a day near home, three on the Frontier, five in the
+# Deeps, read off where the lair stands (core/regions.gd's bands). One map,
+# one lair in each country, all cleared at the same minute.
+func test_slower_past_the_marches() -> void:
+	var Regions = load("res://core/regions.gd")
+	var w = World.new()
+	w.add_settlement(World.Settlement.new("home", Vector2.ZERO, "human", "city"))
+	var at := {"heartland": 300.0, "marches": 600.0, "frontier": 800.0, "deeps": 1000.0}
+	for band in at:
+		w.add_lair(World.Lair.new(band, Vector2(float(at[band]), 0.0), "goblinoid"))
+	for l in w.lairs:
+		check(Regions.band_of(w, l.position) == l.id, "%s's lair stands in %s (%s)" % [l.id, l.id, Regions.band_of(w, l.position)])
+		WorldLairs.mark_cleared(l, 0.0)
+	check(WorldLairs.respawn_after(w, w.lairs[0]) == 1440.0 and WorldLairs.respawn_after(w, w.lairs[1]) == 1440.0,
+		"a day in the Heartland and the Marches")
+	check(WorldLairs.respawn_after(w, w.lairs[2]) == 4320.0, "three days on the Frontier")
+	check(WorldLairs.respawn_after(w, w.lairs[3]) == 7200.0, "five in the Far Deeps")
+	check(WorldLairs.respawn_after(null, w.lairs[3]) == WorldLairs.RESPAWN, "no map to read: the base day")
+	var day1: Array = WorldLairs.respawn(w, 1440.0).map(func(l): return l.id)
+	check(day1.size() == 2 and "heartland" in day1 and "marches" in day1, "after a day the near two are back (%s)" % [day1])
+	check(WorldLairs.respawn(w, 4319.0).is_empty(), "the Frontier's is still empty a minute short of three days")
+	check(WorldLairs.respawn(w, 4320.0).map(func(l): return l.id) == ["frontier"], "...and back at three")
+	check(WorldLairs.respawn(w, 7199.0).is_empty() and w.lairs[3].looted, "the Deeps' is still empty on day five")
+	check(WorldLairs.respawn(w, 7200.0).map(func(l): return l.id) == ["deeps"], "...and back at five")
+
 func _init() -> void:
 	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/%d-%d" % [OS.get_process_id(), randi()])
 
@@ -143,6 +168,8 @@ func _init() -> void:
 	var came: Array = WorldLairs.respawn(wq, 1000.0 + WorldLairs.RESPAWN)
 	check(came.size() == 1 and lq.raids == 0 and lq.raid_at == 1000.0 + WorldLairs.RESPAWN,
 		"a respawned lair's raid clock restarts at the respawn (%s, %d)" % [lq.raid_at, lq.raids])
+
+	test_slower_past_the_marches()
 
 	print("test_lair_respawn: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)

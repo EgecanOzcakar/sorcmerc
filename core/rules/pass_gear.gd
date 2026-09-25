@@ -1,5 +1,7 @@
 # Equipment resolution + attacks. Ported from dnd-maintainer src/lib/resolver/equipment.ts.
-# v1 scope: weapons.json + armor.json only. The export ships no gear/packs/bundles
+# v1 scope: weapons.json + armor.json, plus magic-items.json ids as kind "magic"
+# rows whose mechanics are core/rules/pass_items.gd's (a magic shield resolves
+# here as the shield it is, 2026-09-25). The export ships no gear/packs/bundles
 # (SCHEMA gaps #1, #2, #6), so bundle-choice resolves to a warning and unknown item
 # ids become inert rows. Only `ch.equipped` is a character's — everything else the
 # party is carrying lives in Party.stash (T10), which the sheet knows nothing about.
@@ -7,6 +9,9 @@ extends RefCounted
 
 const Bundles = preload("res://core/rules/bundles.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
+const PassItems = preload("res://core/rules/pass_items.gd")   # magic items: kind "magic", and magic shields
+
+const MUNDANE_SHIELD := "shield"   # armor.json's one shield, the base a magic shield stands on
 
 # {items: Array, warnings: Array[String]}
 # item = {item_id, def, kind: "weapon"|"armor"|"unknown", quantity, equipped, source}
@@ -26,6 +31,16 @@ static func equipment(ch, bundles: Array) -> Dictionary:
 		if def.is_empty():
 			def = Catalog.index("armor.json").get(iid, {})
 			kind = "armor"
+		if def.is_empty() and PassItems.is_shield(iid):
+			# A +1 shield is a shield (2026-09-25): armor.json's, named for what
+			# it is. Its own bonus is pass_items.gd's, like every magic item's.
+			def = Catalog.index("armor.json").get(MUNDANE_SHIELD, {}).duplicate()
+			def["name"] = String(Catalog.magic_item(iid).get("name", iid))
+			kind = "armor"
+		if def.is_empty() and PassItems.is_magic_item(iid):
+			# Worn, not wielded: pass_items.gd decides what (if anything) it does.
+			def = Catalog.magic_item(iid)
+			kind = "magic"
 		if def.is_empty():
 			kind = "unknown"
 			warns.append("equipped item \"%s\" matches neither weapons.json nor armor.json — "

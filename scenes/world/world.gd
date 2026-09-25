@@ -3832,7 +3832,7 @@ func _turn_in(quest: Dictionary) -> void:
 		_build_visit_panel()
 		var who := String(quest.get("issuer", _visit["settlement"].faction))
 		_say("%s — paid, +%d ◉, +%d XP. The %s will remember it.%s" % [
-			quest["title"], reward, reward * Quest.XP_PER_GOLD, Ladder.people(who),
+			quest["title"], reward, Quest.xp_reward(quest), Ladder.people(who),
 			("  " + String(lead["text"])) if not lead.is_empty() else ""])
 		_autosave()
 
@@ -4404,8 +4404,8 @@ func _build_market_page(box: VBoxContainer, s) -> void:
 				"Heal", _heal)
 			for ch in party.roster:   # #109
 				if ch.dead:
-					_trade_row(rows, "Raise %s from the dead — %d ◉" % [ch.cname, Party.REVIVE_COST],
-						"Raise", _raise_dead.bind(ch.id), party.gold < Party.REVIVE_COST)
+					_trade_row(rows, "Raise %s from the dead — %d ◉" % [ch.cname, Party.revive_cost(ch)],
+						"Raise", _raise_dead.bind(ch.id), party.gold < Party.revive_cost(ch))
 			if Visit.can_work_healer(party):
 				var worked: bool = _visit.get("worked", false)
 				_trade_row(rows, "Work a shift in the ward — your restoration spell opens the door, Medicine sets the wage",
@@ -5157,7 +5157,7 @@ func _job_row(rows: VBoxContainer, offer: Dictionary) -> void:
 	_trade_row(rows, "%s%s" % [offer["title"], tag], "Take", _take_quest.bind(offer), false,
 		Icons.scene_art("quest-" + String(offer.get("kind", "")), null),
 		("For the %s · " % Ladder.people(who) if who != "" else "")
-		+ "Pays %d ◉" % int(offer.get("reward", {}).get("gold", 0)))
+		+ "Pays %d ◉ and %d XP" % [int(offer.get("reward", {}).get("gold", 0)), Quest.xp_reward(offer)])
 
 # Issue #33: the label wraps. Without that its minimum width is the whole
 # string, and a job with a long title pushed the row — and with it the counter,

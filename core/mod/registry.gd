@@ -39,6 +39,7 @@ const WorldPack = preload("res://core/mod/world_pack.gd")
 const Story = preload("res://core/mod/story.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Effects = preload("res://core/rules/effects.gd")
+const PassItems = preload("res://core/rules/pass_items.gd")   # effects/items.json vocabulary
 const Callings = preload("res://core/callings.gd")
 
 const OFFICIAL_ROOT := "res://content"
@@ -293,6 +294,27 @@ static func _check_effects(pack, overlays: Dictionary) -> void:
 					_check_effect_id(pack, where, id, "conditions.json", overlays, "condition")
 				"effects/potions.json":
 					_check_potion(pack, where, id, e, overlays)
+				"effects/items.json":
+					_check_item(pack, where, id, e, overlays)
+
+# A worn magic item's mechanics (core/rules/pass_items.gd): a magic-items.json
+# id, a slot from the closed list, and only keys the pass reads — a mistyped
+# "armour_class" would otherwise be an item that quietly does nothing.
+static func _check_item(pack, where: String, id: String, e: Dictionary,
+		overlays: Dictionary) -> void:
+	_check_effect_id(pack, where, id, "magic-items.json", overlays, "item")
+	if not String(e.get("slot", "")) in PassItems.SLOTS:
+		pack.errors.append("%s: \"%s\" has unknown slot \"%s\" (one of %s)"
+			% [where, id, e.get("slot", ""), ", ".join(PassItems.SLOTS)])
+	for k in e:
+		if not String(k) in PassItems.KEYS:
+			pack.errors.append("%s: \"%s\" has unknown key \"%s\" (one of %s)"
+				% [where, id, k, ", ".join(PassItems.KEYS)])
+	var set_to = e.get("set_ability", {})
+	if set_to is Dictionary:
+		for a in set_to:
+			if not String(a) in PassItems.ABILITIES:
+				pack.errors.append("%s: \"%s\" sets unknown ability \"%s\"" % [where, id, a])
 
 static func _check_feature(pack, where: String, id: String, e: Dictionary) -> void:
 	if not e.get("kind") in Effects.KINDS:
