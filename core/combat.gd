@@ -1523,7 +1523,7 @@ func perform(actor, v: Dictionary, target = null) -> Dictionary:
 			# swing, so it rides the same "free" path Cleave's second swing uses. Mastery
 			# is read off the main hand, so the off-hand swing carries none.
 			return resolve_attack(actor, target, {"free": true, "no_mastery": true,
-				"damage": v["damage"], "atk_bonus": int(v["to_hit"])})
+				"damage": v["damage"], "atk_bonus": int(v["to_hit"]), "weapon": String(v.get("weapon", ""))})
 		"shove": return act_shove(actor, target, v.get("choice", "prone"))
 		"smash": return act_smash(actor)
 		"help": act_help(actor, target)
@@ -2823,6 +2823,7 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		opts = opts.duplicate()
 		opts["melee"] = true
 		opts["damage"] = opts.get("damage", "1")
+		opts["weapon"] = opts.get("weapon", UNARMED)   # #245: the log says what it was
 	var free: bool = oa or opts.get("free", false)   # Cleave's second swing costs nothing
 	if not attacker.conscious() or _no_economy(attacker, "action" if not free else "reaction"):
 		return {"error": "cannot act"}   # ai.gd swings without asking available()
@@ -2886,7 +2887,7 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 	if hit and not crit and _auto_crit(attacker, target, opts):
 		crit = true
 	var out = {
-		"attacker": attacker.cname, "target": target.cname,
+		"attacker": attacker.cname, "target": target.cname, "weapon": weapon_name(attacker, opts),
 		"nat": nat, "dice": r.dice, "bonus": atk_bonus, "total": total, "ac": ac,
 		"hit": hit, "crit": crit, "damage": 0, "extras": [], "mode": mode,
 		"high_ground": high,
@@ -3065,10 +3066,36 @@ func _push_away(attacker, target, hexes: int) -> int:
 func _damage_type(attacker) -> String:
 	return str(attacker.attacks[0].get("damage_type", "")) if not attacker.attacks.is_empty() else ""
 
+# #245 — what a blow was struck with, for the log: the hero's main-hand attack
+# off the sheet (attacks[0], the one every derived number already comes from),
+# a monster's own natural attack (bestiary.json's attack_name: Bite, Scimitar,
+# Slam), or whatever the caller says it was (the off-hand blade, an archer's
+# fist on an opportunity attack). "" when nothing names it — a test's bare
+# Combatant — and then the line reads as it always did.
+const UNARMED := "Unarmed Strike"
+
+func weapon_name(attacker, opts := {}) -> String:
+	var named := String(opts.get("weapon", ""))
+	if named != "":
+		return named
+	if not attacker.attacks.is_empty():
+		return String(attacker.attacks[0].get("name", ""))
+	return String(attacker.attack_name)
+
+# " with a Longsword", " with an Unarmed Strike", " with Claws" — a name that
+# reads as a plural (Claws, Bites, Hooves, Tentacles) takes no article.
+static func _with(weapon: String) -> String:
+	if weapon == "":
+		return ""
+	var plural := weapon.ends_with("s") and not weapon.ends_with("ss")
+	var article := "" if plural else ("an " if weapon.substr(0, 1).to_lower() in ["a", "e", "i", "o", "u"] else "a ")
+	return " with %s%s" % [article, weapon]
+
 func _log_attack(o: Dictionary, oa: bool) -> void:
 	var dice_s = str(o.dice[0]) if o.dice.size() == 1 else "%d̶%d" % [o.dice[0], o.dice[1]]
 	var tag = "OA " if oa else ""
 	var roll_s = "d20[%s]%+d = %d vs AC %d" % [dice_s, o.bonus, o.total, o.ac]
+	var with_s := _with(String(o.get("weapon", "")))
 	# #156: the bonus is already inside the total; this says where part of it
 	# came from, the way the damage line names each rider it adds.
 	if int(o.get("high_ground", 0)) > 0:
@@ -3080,9 +3107,9 @@ func _log_attack(o: Dictionary, oa: bool) -> void:
 				"the strike fumbles at the last inch.", "%s twists clear untouched." % o.target,
 			]
 			var pick: int = (str(o.attacker).hash() + round_num) % flavs.size()
-			log.append("%s%s misses %s badly — nat 1, %s" % [tag, o.attacker, o.target, flavs[pick]])
+			log.append("%s%s misses %s badly%s — nat 1, %s" % [tag, o.attacker, o.target, with_s, flavs[pick]])
 		else:
-			log.append("%s%s attacks %s — %s, misses." % [tag, o.attacker, o.target, roll_s])
+			log.append("%s%s attacks %s%s — %s, misses." % [tag, o.attacker, o.target, with_s, roll_s])
 		return
 	var extra = ""
 	for e in o.extras:
@@ -3096,7 +3123,7 @@ func _log_attack(o: Dictionary, oa: bool) -> void:
 	dmg_line += extra
 	if base != int(o.damage):
 		dmg_line += " (%d total)" % o.damage
-	log.append("%s%s %s %s — %s, %s." % [tag, o.attacker, word, o.target, roll_s, dmg_line])
+	log.append("%s%s %s %s%s — %s, %s." % [tag, o.attacker, word, o.target, with_s, roll_s, dmg_line])
 
 # "1d6[4]+2 = 6" / "2d6[4,3]+2 = 9" — "" when the notation had no dice (a flat
 # modifier like an unarmed strike's "1"), so the caller falls back to a bare number.
