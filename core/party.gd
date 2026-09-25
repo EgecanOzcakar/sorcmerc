@@ -76,6 +76,10 @@ var lodge: Dictionary = {}
 # pools too), plus which chairs were taken today. Owned entirely by
 # core/recruits.gd.
 var hiring: Dictionary = {}
+# How long each benched merc has sat out — id -> {"since": world-minute,
+# "warned": bool}. Owned entirely by core/bench.gd, which keeps it lazily off
+# `active`; {} for a save from before the bench counted.
+var bench_clock: Dictionary = {}
 
 # --- roster ---------------------------------------------------------------
 

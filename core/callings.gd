@@ -1,10 +1,12 @@
 # Callings — the past each hero's background hands them, pointed at the map.
 #
-# Every companion in sorcmerc is player-made, so the companion with a past that
-# comes calling has to be systemic: sixteen templates, one per background, each
-# aimed at something the live world already holds — a landmark, a lair, a band,
-# a town, a lord's hall. Told once at the fire, done on the road, paid in XP, an
-# heirloom and a bond with whoever did the thing.
+# sorcmerc has no authored companions — the founder is made in the creator and
+# everyone after is a hire rolled at an inn (core/recruits.gd) — so the
+# companion with a past that comes calling has to be systemic: sixteen
+# templates, one per background, each aimed at something the live world already
+# holds — a landmark, a lair, a band, a town, a lord's hall. Told once at the
+# fire, done on the road, paid in XP, an heirloom and a bond with whoever did
+# the thing.
 #   docs/superpowers/specs/2026-09-21-callings-relations-design.md
 #
 # What this owns: the templates, the choice of target, the telling, what

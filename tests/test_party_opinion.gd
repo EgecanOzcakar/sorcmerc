@@ -35,6 +35,9 @@ func _init() -> void:
 	test_breakup()
 	test_camp_moment_shapes()
 	test_camp_moment_never_asks_twice()
+	test_camp_lines_by_temperament()
+	test_courtship_line_asker_is_a()
+	test_headers_are_current()
 	test_combat_hooks()
 	test_rally_status_survives_new_turn()
 	test_save_round_trip()
@@ -290,6 +293,85 @@ func test_camp_moment_never_asks_twice() -> void:
 			check(false, "a declined pair was asked again (seed %d)" % seed_v)
 			return
 	check(true, "a declined pair is never asked again")
+
+# The audit's §2.6: the fire's lines are picked by the pair's temperaments.
+# Every pairing of the eight — and a pair where one or both hold none — has
+# several lines of every kind, each filled with both names and nothing left
+# over, and a pairing's lines are its own (Brave and Craven do not hear what
+# two Calm heroes hear).
+const Traits = preload("res://core/traits.gd")
+
+func test_camp_lines_by_temperament() -> void:
+	var tempers: Array = Traits.of_family("temperament")
+	tempers.append("")   # a hero from before traits
+	var a := _demo("anna", "human", "farmer")
+	var b := _demo("bram", "human", "farmer")
+	var thin := []
+	var unfilled := []
+	for ta in tempers:
+		for tb in tempers:
+			Traits.set_family(a, "temperament", ta)
+			Traits.set_family(b, "temperament", tb)
+			for kind in ["warming", "quarrel", "courtship"]:
+				var ls: Array = PartyOpinion.lines_for(a, b, kind)
+				var want := 2 if (ta == "" and tb == "" and kind == "courtship") else 3
+				if ls.size() < want:
+					thin.append("%s|%s %s (%d)" % [ta, tb, kind, ls.size()])
+				for l in ls:
+					var t := String(l[0])
+					if not ("{a}" in t and "{b}" in t) or "%s" in t:
+						unfilled.append(t)
+	check(thin.is_empty(), "every pairing has several lines of every kind: %s" % str(thin))
+	check(unfilled.is_empty(), "every line names both of them, {a} and {b}: %s" % str(unfilled))
+	Traits.set_family(a, "temperament", "brave")
+	Traits.set_family(b, "temperament", "craven")
+	var bc := PartyOpinion.lines_for(a, b, "quarrel").map(func(l): return l[0])
+	Traits.set_family(a, "temperament", "calm")
+	Traits.set_family(b, "temperament", "calm")
+	var cc := PartyOpinion.lines_for(a, b, "quarrel").map(func(l): return l[0])
+	var shared := bc.filter(func(l): return l in cc)
+	check(shared.is_empty(), "Brave and Craven quarrel differently from two Calm heroes")
+	for l in PartyOpinion.PAIR_LINES["brave|craven"]["quarrel"]:
+		check(l in bc, "the opposed pair hears its own lines")
+	# With none held on either side, the old shared lines.
+	Traits.set_family(a, "temperament", "")
+	Traits.set_family(b, "temperament", "")
+	check(PartyOpinion.lines_for(a, b, "warming").map(func(l): return l[0]) == PartyOpinion.LINES["warming"],
+		"no temperaments: the shared lines")
+
+# {a} in a line is whoever the moment's "a" is — so the Brave one, in a Brave
+# line, whichever of the pair was drawn first; and in a courtship, the asker.
+func test_courtship_line_asker_is_a() -> void:
+	var p := Party.new()
+	var x := _demo("xan", "human", "farmer")
+	var y := _demo("yve", "human", "farmer")
+	Traits.set_family(x, "temperament", "cautious")
+	Traits.set_family(y, "temperament", "brave")
+	p.add_member(x)
+	p.add_member(y)
+	var seen := 0
+	for s in range(1, 300):
+		PartyOpinion.set_score(p, "xan", "yve", PartyOpinion.COURTSHIP_MIN + 5)
+		p.relations[PartyOpinion.key("xan", "yve")]["status"] = ""
+		var m: Dictionary = PartyOpinion.camp_moment(p, RNG.new(s))
+		if m.get("kind", "") != "courtship":
+			continue
+		seen += 1
+		var asker: String = m["a_name"]
+		var ok := false
+		for pool in [PartyOpinion.TEMPER_LINES["brave"]["courtship"], PartyOpinion.TEMPER_LINES["cautious"]["courtship"]]:
+			for l in pool:
+				var want: String = String(l)
+				var holder := "Yve" if pool == PartyOpinion.TEMPER_LINES["brave"]["courtship"] else "Xan"
+				if want.replace("{a}", holder).replace("{b}", "Xan" if holder == "Yve" else "Yve") == m["text"]:
+					ok = holder == asker
+		check(ok, "the one who asks in the line is the moment's a (%s): %s" % [asker, m["text"]])
+	check(seen > 0, "courtships came up (%d)" % seen)
+
+func test_headers_are_current() -> void:
+	for path in ["res://core/party_opinion.gd", "res://core/callings.gd"]:
+		var src := FileAccess.get_file_as_string(path)
+		check(not "player-made" in src, "%s no longer says every member is player-made" % path)
 
 # A real Combat on a real board: the three hooks answer off positions and bands.
 func _fight(p: Party) -> Combat:

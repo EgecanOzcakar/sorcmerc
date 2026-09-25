@@ -47,6 +47,7 @@
 #     "downtime": {"trained": ["vera"], "pit": {"riverhold": {"week": 3, "beaten": 1}}}  // Downtime.to_dict
 #     "lodge": {"settlement_id": "riverhold", "rooms": ["strongroom"], "gold": 250, ...}  // Lodge.to_dict; {} until bought
 #     "hiring": {"rule": "hire", "taken": {"riverhold": {"period": 3, "slots": [0]}}}  // Recruits.to_dict; {} = grandfathered
+#     "bench": {"thrun": {"since": 8640.0, "warned": false}}  // Bench.to_dict; {} = clocks start on load
 #   },
 #   "story": {                        // M7: the content pack's story, mid-telling.
 #     "pack": "ashen-road",           //   {} on every run with no story on it.
@@ -70,6 +71,7 @@ const Callings = preload("res://core/callings.gd")
 const Downtime = preload("res://core/downtime.gd")
 const Lodge = preload("res://core/lodge.gd")
 const Recruits = preload("res://core/recruits.gd")
+const Bench = preload("res://core/bench.gd")
 
 const SaveDir = preload("res://core/save_dir.gd")
 const FORMAT := "sorcmerc-world"
@@ -378,6 +380,7 @@ static func _party_dict(party) -> Dictionary:
 		"downtime": Downtime.to_dict(party),
 		"lodge": Lodge.to_dict(party),
 		"hiring": Recruits.to_dict(party),
+		"bench": Bench.to_dict(party),   # the audit's §2.4: how long each benched merc has sat out
 	}
 
 static func _party_from(pd: Dictionary):
@@ -413,6 +416,7 @@ static func _party_from(pd: Dictionary):
 	Downtime.from_dict(party, pd.get("downtime", {}))
 	Lodge.from_dict(party, pd.get("lodge", {}))
 	Recruits.from_dict(party, pd.get("hiring", {}))   # no key: a run from before hiring, grandfathered
+	Bench.from_dict(party, pd.get("bench", {}))   # no key: every clock starts at the first frame after the load
 	return party
 
 # JSON gives every number back as a float; quest counters are compared as ints.
