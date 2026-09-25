@@ -311,14 +311,22 @@ const BOSS_POOL := [
 ]
 
 # Reference win rate a boss's XP bonus is measured against: the average of the
-# scaler's own easy/hard sweep results (93.0%/79.0% as of T94's re-measurement,
-# scaler.gd's TUNING header) rather than normal's own 83.5% — CURVE was
-# calibrated so normal sits near that average already, and it keeps this
-# constant tied to the two extremes instead of a third independently-drifting
-# number. A boss under this rate is harder than the curve's middle, and earns
-# XP in proportion. T38 found this stale at 0.698 (it still carried T23's
-# extremes); re-derive it from the header numbers on every TIER retune.
-const BOSS_REF_WIN_RATE := 0.86   # (93.0 + 79.0) / 2, T94's re-measurement
+# scaler's own easy/hard sweep results (scaler.gd's TUNING header) rather than
+# normal's own — CURVE was calibrated so normal sits near that average already,
+# and it keeps this constant tied to the two extremes instead of a third
+# independently-drifting number. A boss under this rate is harder than the
+# curve's middle, and earns XP in proportion. T38 found this stale at 0.698 (it
+# still carried T23's extremes); re-derive it from the header numbers on every
+# TIER retune.
+# RE-DERIVED 2026-09-25 (the design audit §7.2): it was (93.0 + 79.0) / 2 =
+# 0.86 off T94's measurement, and TIER has been retuned since (T-classes-b,
+# 2026-09-17) and the ruler re-measured (the autopilot that spends its whole
+# turn, 2026-09-24). tests/sweep_tier.gd, 200 seeds a tier, level-3 presets,
+# re-run 2026-09-25 on master: easy 96.5%, hard 81.5% — the header's numbers
+# exactly. Every linear-campaign boss rated under it earns about 3.5% more
+# bonus XP than it did (0.89 / 0.86); BOSS_POOL's own win_rate fields are
+# unchanged.
+const BOSS_REF_WIN_RATE := 0.89   # (96.5 + 81.5) / 2, sweep_tier 2026-09-25
 # ponytail: the win_rate spread above is power.gd's known chaff-vs-chunk
 # mispricing (T23: a lone big bruiser like the mammoth prices for a fight it
 # doesn't survive) — cap the bonus so that ceiling doesn't turn into a
