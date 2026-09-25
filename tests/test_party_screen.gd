@@ -15,6 +15,7 @@ extends SceneTree
 const Travel = preload("res://core/travel.gd")
 const Leveling = preload("res://core/leveling.gd")   # #118: the roster row's Level up
 const PartyOpinion = preload("res://core/party_opinion.gd")
+const Bench = preload("res://core/bench.gd")
 
 var _pass := 0
 var _fail := 0
@@ -345,10 +346,12 @@ func _bench_first(screen) -> void:
 	await process_frame
 
 # The Relations block beside the standing orders: a caption and a drawn web
-# (scenes/party/relations_web.gd) with one line per active pair, each line's
-# band the pair's band() and its hover the pair's describe(), so the words are
-# still one mouse-over away. A party of one has nobody to get on with, and
-# shows nothing.
+# (scenes/party/relations_web.gd) with one line per pair — the marching party's
+# first, then the bench's (the design audit's §2.4b) — each line's band the
+# pair's band() and its hover the pair's describe(), so the words are still one
+# mouse-over away. A benched face says how long they have sat out, and whether
+# they are restless. A company of one has nobody to get on with, and shows
+# nothing.
 func _relations(screen) -> void:
 	var p = screen.party
 	var a: String = p.active[0]
@@ -365,8 +368,11 @@ func _relations(screen) -> void:
 		return
 	web.size = web.custom_minimum_size
 	var es: Array = web.edges()
-	check(es.size() == PartyOpinion.active_pairs(p).size(),
-		"one line per active pair (%d for %d)" % [es.size(), PartyOpinion.active_pairs(p).size()])
+	var everyone: Array = PartyOpinion.fireside_ids(p, true)
+	check(es.size() == PartyOpinion.pairs(everyone).size(),
+		"one line per pair, bench and all (%d for %d)" % [es.size(), PartyOpinion.pairs(everyone).size()])
+	check(es.filter(func(e): return not e["bench"]).size() == PartyOpinion.active_pairs(p).size(),
+		"...the marching pairs among them, unmarked")
 	var first: Dictionary = es[0]
 	check(first["a"] == a and first["b"] == b and first["band"] == "rivals" and int(first["score"]) == -44,
 		"the soured pair's line is a rivals line: %s" % str(first))
@@ -378,16 +384,38 @@ func _relations(screen) -> void:
 	check("rivals (-44)" in want and web.tooltip_at(mid) == want, "...and its tooltip is describe(): %s" % web.tooltip_at(mid))
 	# Over a face: every line that person is on.
 	var mine: String = web.tooltip_at(pos[0])
-	check(mine.split("\n").size() == p.active.size() - 1 and want in mine,
+	check(mine.split("\n").size() == web.ids().size() - 1 and want in mine,
 		"a face's tooltip lists each of its pairs (%d lines)" % mine.split("\n").size())
 	check(web.tooltip_at(Vector2(2, 2)) == "", "empty space says nothing")
+	# Everyone but the first on the bench: the web still shows them, in a row.
 	for id in p.active.duplicate():
 		if id != a:
 			p.bench(id)
+	Bench.sync(p, p.world_now)
+	var restless_id := String(p.bench_list()[0].id)
+	p.bench_clock[restless_id]["warned"] = true
+	screen._refresh()
+	await process_frame
+	web = node_named(screen, "RelationsWeb")
+	check(web != null, "one marching and a bench: the web still draws")
+	if web != null:
+		web.size = web.custom_minimum_size
+		check(web.ids()[0] == a and web.ids().size() == 1 + p.bench_list().size(),
+			"the marching one in the ring, the bench after (%s)" % str(web.ids()))
+		check(web.edges().size() == PartyOpinion.pairs(web.ids()).size() and web.edges()[0]["bench"],
+			"every line now touches the bench")
+		var bpos: Array = web.face_positions()
+		var bi: int = web.ids().find(restless_id)
+		var tip: String = web.tooltip_at(bpos[bi])
+		check(tip.begins_with(web.bench_note(restless_id)) and "on the bench" in tip and "Restless" in tip,
+			"a restless benched face says so first: %s" % tip.get_slice("\n", 0))
+		check(web.face_at(bpos[bi]) == bi, "the smaller bench face is found under the mouse")
+	for ch in p.bench_list():
+		p.remove_member(ch.id)
 	screen._refresh()
 	await process_frame
 	check(_label_texts(node_named(screen, "RelationsRow")).is_empty() and node_named(screen, "RelationsWeb") == null,
-		"a party of one shows no block at all")
+		"a company of one shows no block at all")
 
 # Every Label under a node, depth first — a roster row's name sits a few
 # containers down.

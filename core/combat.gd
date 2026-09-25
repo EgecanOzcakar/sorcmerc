@@ -291,10 +291,13 @@ const BARK_SFX := {"hit": "hit", "crit": "crit", "kill": "kill", "down": "down",
 	"low_hp": "", "victory": "victory"}
 
 # Fire a bark for `c` on `trigger` ("hit" | "crit" | "kill" | "low_hp" | "down" |
-# "victory"). Cosmetic: never gates, never touches the combat RNG, never fails loudly.
+# "victory" | "partner_down"). Cosmetic: never gates, never touches the combat RNG,
+# never fails loudly.
 # T9z: `sfx` overrides the trigger's default sting — resolve_attack passes the
 # attacker's weapon-specific hit so a bow and a mace stop sounding identical.
-func bark(c, trigger: String, sfx := "") -> void:
+# `ally` is the name a partner_down line says (core/barks.gd): the first name of
+# the Combatant who just went down, so it is always someone really here.
+func bark(c, trigger: String, sfx := "", ally := "") -> void:
 	var sound: String = sfx if sfx != "" else BARK_SFX.get(trigger, "")
 	if sound != "":
 		Sound.play_sfx(sound)   # before the returns below: sound plays even in a fast run
@@ -303,7 +306,9 @@ func bark(c, trigger: String, sfx := "") -> void:
 	var faction := ""
 	if c.team != "party" and c.src_id != "":
 		faction = String(Catalog.monster(c.src_id).get("faction", ""))
-	var text := Barks.line(_bark_rng, c.team, faction, trigger)
+	# The audit's §2.3: a hero speaks in their temperament's voice.
+	var temper: String = Barks.temperament(c.traits) if c.team == "party" else ""
+	var text := Barks.line(_bark_rng, c.team, faction, trigger, temper, ally)
 	if text == "":
 		return
 	# T31: a line never fires silently — pair it with this speaker's gibberish stinger.
@@ -3196,9 +3201,15 @@ func _take_damage(target, dmg: int, dtype := "", crit := false) -> void:
 			_release_grapples()
 		if _member(target):
 			var rallied: Array = PartyOpinion.rally(party, target, self)
+			var said := false
 			for ally in allies_of(target):
 				if ally.id in rallied:
 					log.append("%s rallies — %s is down." % [ally.cname, target.cname])
+					# The first of them to rally says so, by name (core/barks.gd's
+					# partner_down); one voice, not a chorus.
+					if not said:
+						bark(ally, "partner_down", "", String(target.cname).get_slice(" ", 0))
+						said = true
 
 # Temporary hit points never stack: the higher of the two stays (RAW).
 func grant_temp_hp(c, n: int) -> void:
