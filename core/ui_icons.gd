@@ -507,7 +507,14 @@ static func portrait_rect(faction: String, service: String, px := 160, mood := "
 # verb is "<feature>:<basic>" (combat.gd's grant_verb, e.g. Flurry of Blows
 # granting an attack) and an upcast spell is "<spell>@<level>". Both are cut
 # back to the thing that has art.
-static func skill_icon(v: Dictionary) -> Texture2D:
+#
+# #241: `who` is the combatant whose button it is. Given, the plain Attack wears
+# the weapon it will swing (who.attacks[0], the main hand — the one
+# Adapter.set_main_attack puts up) and the off-hand swing wears its own, the same
+# way a Drink button wears its bottle. A granted attack ("<feature>:attack") keeps
+# the generic sword: it is its own button beside the plain one and a second
+# copy of the longsword would make the two look alike.
+static func skill_icon(v: Dictionary, who = null) -> Texture2D:
 	var sid := String(v.get("spell", ""))
 	var id := String(v.get("id", "")).get_slice(":", 1) if String(v.get("id", "")).contains(":") \
 		else String(v.get("id", ""))
@@ -519,11 +526,26 @@ static func skill_icon(v: Dictionary) -> Texture2D:
 		tex = _icon("%s/skills/%s.svg" % [ICON_ROOT, sid])
 		if tex == null:
 			tex = _icon("%s/schools/%s.svg" % [ICON_ROOT, spell_school(sid)])
+	elif who != null and String(v.get("id", "")) == "attack" and not who.attacks.is_empty():
+		tex = weapon_icon(String(who.attacks[0].get("id", "")))
+	elif v.has("weapon"):   # the off-hand swing (Adapter._offhand_verb)
+		tex = weapon_icon(String(v["weapon"]))
 	else:
 		tex = _icon("%s/skills/%s.svg" % [ICON_ROOT, id])
 	if tex == null:
 		tex = verb_icon(String(v.get("kind", "")))
 	return tex
+
+# #241: a weapon attack's picture — the item render the inventory shows for it
+# (assets/art/items, every one of the SRD's 38 weapons has one). An attack id is
+# the weapon's catalog id, or that plus "-thrown" for the thrown copy of a
+# javelin or dagger (core/rules/pass_gear.gd), which is still the same javelin.
+# Null for an Unarmed Strike or a pack's weapon nobody drew, so the caller keeps
+# the generic badge.
+static func weapon_icon(attack_id: String) -> Texture2D:
+	if attack_id == "":
+		return null
+	return item_art(attack_id.trim_suffix("-thrown"))
 
 # One per verb `kind`, plus BAR_ICONS. A kind with no art of its own — a
 # content pack's, or one added before its icon was drawn — gets the generic

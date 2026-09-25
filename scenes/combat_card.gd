@@ -22,6 +22,7 @@ const Icons = preload("res://core/ui_icons.gd")
 const Portraits = preload("res://scenes/portraits.gd")
 const Figures3D = preload("res://scenes/figures3d.gd")
 const Traits = preload("res://core/traits.gd")
+const Active = preload("res://core/active_effects.gd")   # #238
 
 signal closed
 
@@ -43,6 +44,7 @@ const FIGURE_PX := Vector2i(92, 158)
 
 var _who = null               # the Combatant this card is showing, or null
 var _cb = null
+var _sig := ""                # #238: what the card was last drawn from (see refresh)
 var _rows := VBoxContainer.new()
 # Where _line/_cap/_bar append: the column beside the portrait while the
 # headline numbers are being written, then _rows again for everything that
@@ -77,7 +79,33 @@ func show_who(c, cb) -> void:
 	_who = c
 	_cb = cb
 	visible = true
+	_sig = _signature()
 	_render()
+
+
+# #238: the card is sticky, so it outlives the moment it was drawn — the Bless
+# landed, the goblin went prone, the hero dropped, and a card that only
+# redrew on a NEW hover still showed the creature as it was. The screen calls
+# this on every _refresh; it redraws only when something the card shows has
+# changed, so a turn that touched nobody on it costs one string compare.
+func refresh() -> void:
+	if _who == null or not visible:
+		return
+	var sig := _signature()
+	if sig == _sig:
+		return
+	_sig = sig
+	_render()
+
+
+# Everything the card reads off the fight that can change mid-fight: health,
+# AC, the effects and their clocks, the death saves, cover.
+func _signature() -> String:
+	var c = _who
+	var cb = _cb
+	var chips: Array = Active.of(cb, c).map(func(x): return [x["id"], x["label"], x["clock"]])
+	return var_to_str([c.hp, c.temp_hp, c.max_hp, cb.effective_ac(c), c.speed, chips,
+		c.is_down(), c.is_dead(), c.death_s, c.death_f, cb.is_cover(c.pos)])
 
 
 func _render() -> void:
@@ -134,6 +162,7 @@ func _render() -> void:
 	_line("Proficiency +%d" % c.pb, Icons.COL_MUTED)
 	# Back to the full width for everything that needs it.
 	_target = null
+	_now_row(c, cb)
 
 	# "stats -/+": the six, signed. For a hero the score is shown beside the
 	# modifier because the sheet has one; a monster has no ability scores in this
@@ -154,21 +183,6 @@ func _render() -> void:
 		lbl.add_theme_color_override("font_color", Icons.COL_BODY)
 		grid.add_child(lbl)
 	_into().add_child(grid)
-
-	# Each condition in its own colour (Icons.CONDITION_COLORS), the one it
-	# wears on the token's strip and in the log.
-	var tags: Array = []
-	for s in Icons.CONDITION_ORDER:
-		if s != "down" and c.has(s):
-			tags.append(Icons.condition_bb(s, "%s %s" % [Icons.condition_glyph(s), s]))
-	if c.is_down():
-		tags.append(Icons.condition_bb("down", "%s stable" % Icons.condition_glyph("down") if c.is_stable() \
-			else "%s down %d/%d" % [Icons.condition_glyph("down"), c.death_s, c.death_f]))
-	if cb.is_cover(c.pos):
-		tags.append("in cover")
-	if not tags.is_empty():
-		_cap("Right now")
-		_rich_line(" · ".join(tags), Icons.COL_ACCENT)
 
 	# What the damage types do to it — three lines that decide which spell to
 	# reach for and were nowhere on the old card. Each type in its colour, so
@@ -204,6 +218,77 @@ func _figure(c) -> Control:
 	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	frame.add_child(r)
 	return frame
+
+
+# #238: what is riding on it right now — conditions, buffs, held spells, with
+# how long each has left. The words, tones and clocks are the effect strip's
+# (core/active_effects.gd), the same chips the action bar shows for the hero
+# whose turn it is, so "Bless 9 rounds" here and on the strip cannot disagree;
+# this is the only place a FOE's buffs, or a hero's off their turn, are read.
+# Straight under the health bar: a status is the thing that changed since you
+# last looked, and the ability grid never does.
+#
+# Down, stable and dead are not chips (Active.HIDDEN: that is the health
+# readout's job), so the death saves get a chip of their own here, and cover —
+# a property of the hex, not a status — rides along at the end.
+func _now_row(c, cb) -> void:
+	var chips: Array = Active.of(cb, c)
+	if c.is_down() and not c.is_dead():
+		chips.push_front({"id": "down", "tone": Active.HINDRANCE, "clock": "",
+			"label": "Stable" if c.is_stable() else "Down, saves %d/%d" % [c.death_s, c.death_f],
+			"detail": "Unconscious at 0 HP. Healing brings them back up." if c.is_stable() \
+				else "Death saves, %d succeeded and %d failed: three successes and they stabilise, three failures and they die." % [c.death_s, c.death_f]})
+	if cb.is_cover(c.pos):
+		chips.append({"id": "cover", "tone": Active.EDGE, "clock": "", "label": "In cover",
+			"detail": "Half cover: +2 AC (already in the AC above) and +2 to DEX saves."})
+	if chips.is_empty():
+		return
+	_cap("Right now")
+	var flow := HFlowContainer.new()
+	flow.add_theme_constant_override("h_separation", 5)
+	flow.add_theme_constant_override("v_separation", 4)
+	_into().add_child(flow)
+	var Main = load("res://scenes/main.gd")
+	for x in chips:
+		flow.add_child(_effect_chip(x, Main))
+
+
+# One effect as a chip: a condition in the colour it wears on the token's strip
+# and in the log (Icons.CONDITION_COLORS) with its glyph, anything else in the
+# strip's tone colour (main.gd's _tone_color). The clock in small muted type
+# after the name, the description on hover — scenes/main.gd's _effect_chip,
+# sized for the card.
+func _effect_chip(x: Dictionary, Main) -> Control:
+	var id := String(x["id"])
+	var col: Color = Icons.condition_color(id) if Icons.CONDITION_COLORS.has(id) \
+		else Main._tone_color(String(x["tone"]))
+	var box := PanelContainer.new()
+	var sb := Icons.box(Color(col, 0.12), col.darkened(0.15), 3, 6, 2)
+	sb.border_width_left = 3
+	box.add_theme_stylebox_override("panel", sb)
+	box.mouse_filter = Control.MOUSE_FILTER_STOP
+	var clock := String(x.get("clock", ""))
+	box.tooltip_text = "%s%s\n%s" % [x["label"], (" — " + clock) if clock != "" else "",
+		String(x.get("detail", ""))]
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 5)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(row)
+	var l := Label.new()
+	l.text = ("%s %s" % [Icons.condition_glyph(id), x["label"]]) if Icons.CONDITION_GLYPHS.has(id) \
+		else String(x["label"])
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	l.add_theme_font_size_override("font_size", Icons.FS_SMALL)
+	l.add_theme_color_override("font_color", col.lightened(0.25))
+	row.add_child(l)
+	if clock != "":
+		var k := Label.new()
+		k.text = clock
+		k.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		k.add_theme_font_size_override("font_size", Icons.FS_CAPTION)
+		k.add_theme_color_override("font_color", Icons.COL_MUTED)
+		row.add_child(k)
+	return box
 
 
 # One chip per spell or trait, each explaining itself on hover.

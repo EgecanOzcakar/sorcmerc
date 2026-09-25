@@ -300,7 +300,7 @@ const BARK_SFX := {"hit": "hit", "crit": "crit", "kill": "kill", "down": "down",
 func bark(c, trigger: String, sfx := "", ally := "") -> void:
 	var sound: String = sfx if sfx != "" else BARK_SFX.get(trigger, "")
 	if sound != "":
-		Sound.play_sfx(sound)   # before the returns below: sound plays even in a fast run
+		_sfx(sound)   # before the returns below: sound plays even in a fast run
 	if _bark_rng == null or c == null:
 		return
 	var faction := ""
@@ -316,6 +316,30 @@ func bark(c, trigger: String, sfx := "", ally := "") -> void:
 	barks.append({"id": c.id, "text": text})
 	if barks.size() > BARK_QUEUE_MAX:
 		barks.pop_front()
+
+# #244: a sting the engine wants to play, unless a blow is still landing — then
+# it waits in `_sfx_held` for resolve_attack to play it AFTER the weapon. The
+# fall, the kill sting and a victory are all decided inside _apply_damage, which
+# runs before the attack knows what its own landing sounds like; played on the
+# spot, a killing blow was the death with no weapon in it at all.
+var _sfx_held = null   # Array while _hold_sfx() is collecting, else null
+
+func _sfx(id: String) -> void:
+	if _sfx_held is Array:
+		_sfx_held.append(id)
+	else:
+		Sound.play_sfx(id)
+
+# Run `f` and return the stings it asked for instead of playing them. Nests: a
+# reaction resolving inside the blow collects into its own list and plays it
+# itself, and the outer list is put back untouched.
+func _hold_sfx(f: Callable) -> Array:
+	var outer = _sfx_held
+	_sfx_held = []
+	f.call()
+	var got: Array = _sfx_held
+	_sfx_held = outer
+	return got
 
 # --- board -----------------------------------------------------------
 
@@ -2876,7 +2900,7 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		Ach.record("biggest_hit", int(out.damage))
 		Ach.collect("damage_types", _damage_type(attacker))
 	if hit:
-		_apply_damage(target, out.damage, _damage_type(attacker), crit, attacker)
+		var fell: Array = _hold_sfx(func(): _apply_damage(target, out.damage, _damage_type(attacker), crit, attacker))
 		if tracked and attacker.team == "party" and target.is_dead():
 			if crit:
 				Ach.unlock("crit_kill")
@@ -2891,15 +2915,19 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 			if out.damage > 0:
 				fire_reactions("damaged_by_attack",
 					{"attacker": attacker, "target": target, "damage": out.damage})
-		# T9z: a plain hit sounds like the weapon that landed it. A crit and a kill
-		# keep their own stingers — those are the dramatic beats, and a flourish
-		# on top of every weapon variant would be a second matrix to maintain.
-		if target.is_dead():
-			bark(attacker, "kill")
-		elif crit:
-			bark(attacker, "crit")
-		else:
-			bark(attacker, "hit", WeaponSfx.for_attack(attacker))
+		# T9z: a plain hit sounds like the weapon that landed it, a crit keeps its
+		# own stinger — the dramatic beat, and a flourish on top of every weapon
+		# variant would be a second matrix to maintain.
+		# #244: and a kill is the weapon FIRST, then the death: whatever the blow
+		# set off in _apply_damage (the fall, a victory) and the kill sting wait
+		# for the landing (Audio.play_sfx_then). The bark's own sting is the
+		# landing chosen here, so it is collected and dropped, not played twice.
+		var trig := "kill" if target.is_dead() else ("crit" if crit else "hit")
+		var landing: String = "crit" if trig == "crit" else WeaponSfx.for_attack(attacker)
+		var said: Array = _hold_sfx(func(): bark(attacker, trig))
+		if trig == "kill":
+			fell.append_array(said)
+		Sound.play_sfx_then(landing, fell)
 	else:
 		# A miss had no sound at all until now, which made a fight sound like it
 		# was going better than it was: roughly half of all attack rolls resolved
@@ -3266,7 +3294,7 @@ func _kill(c) -> void:
 	c.hp = 0
 	if c.has("bystander"):
 		objective_failed = true   # whoever it was, they were the point
-		Sound.play_sfx("carter_down")   # the captive too: one stinger for the point of the fight going down
+		_sfx("carter_down")   # the captive too: one stinger for the point of the fight going down
 	if c.has("quarry") and not c.has("escaped"):
 		objective_done = true
 		log.append("The quarry is down — the rest break and run.")

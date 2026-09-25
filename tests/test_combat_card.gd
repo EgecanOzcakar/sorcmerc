@@ -8,6 +8,8 @@
 #   2. it reads a hero and a monster, which carry their numbers differently
 #      (a hero has a sheet with ability scores; a monster has save bonuses)
 #   3. spells and traits come out as two lists, not one run
+#   4. #238: what is riding on it right now — buffs, conditions, held spells,
+#      with their clocks — and the sticky card keeps up as those change
 #
 #   godot --headless --path . -s tests/test_combat_card.gd
 extends SceneTree
@@ -35,6 +37,7 @@ func _init() -> void:
 	await test_reads_a_hero_and_a_monster()
 	await test_spells_and_traits_are_separate()
 	await test_every_verb_explains_itself()
+	await test_shows_what_is_riding_on_it()
 	print("test_combat_card: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -193,6 +196,79 @@ func test_every_verb_explains_itself() -> void:
 	check(checked > 0, "the roster fielded verbs to check at all (%d)" % checked)
 	card.queue_free()
 	await process_frame
+
+
+# #238: the "Right now" row. Bless, Shield (a self-buff with no source verb on
+# a goblin, so it reads through the feature/spell families), Prone and a held
+# concentration spell, each in the effect strip's own words and clock
+# (core/active_effects.gd) — and all of it follows the fight through refresh()
+# without a new hover, which is what the sticky card got wrong.
+func test_shows_what_is_riding_on_it() -> void:
+	var cb = _fight()
+	var card := _card_with(cb)
+	var hero = cb.team_of("party")[0]
+	var foe = cb.team_of("foe")[0]
+
+	card.show_who(hero, cb)
+	await process_frame
+	check(not _text(card).contains("Right now"), "a hero with nothing on them has no Right now row")
+
+	# The sticky card, then the fight moves on under it.
+	hero.statuses["spell:bless"] = {"bonus_to_hit": 2, "bonus_save": 2,
+		"until_tick": cb._tick() + 10 * cb.TICK_STRIDE, "held_by": hero}
+	hero.statuses["concentrating"] = {"spell": "bless", "until_round": cb.round_num + 9}
+	card.refresh()
+	await process_frame
+	var t := _text(card)
+	check(t.contains("Right now"), "a buff landing puts the row up without a new hover")
+	check(t.contains("Bless"), "Bless is named as the strip names it")
+	check(t.contains("10 rounds"), "...with its clock")
+	check(t.contains("Concentrating: Bless"), "a held spell shows as held")
+	var tips: Array = _effect_tips(card)
+	var bless_tip := ""
+	for tip in tips:
+		if String(tip).begins_with("Bless"):
+			bless_tip = tip
+	check(bless_tip.contains("+2 to hit"), "hovering Bless says what it does (%s)" % bless_tip)
+
+	# A foe's own conditions — the strip never shows those, the card must.
+	foe.statuses["prone"] = true
+	card.show_who(foe, cb)
+	await process_frame
+	t = _text(card)
+	check(t.contains("Prone"), "a foe's condition is on its card")
+	check(not t.contains("Bless"), "...and the hero's buffs are not")
+
+	# Hurting it to 0 is not an effect chip (Active.HIDDEN) but the card still
+	# has to stop claiming it is up: the hp bar and the effects both follow.
+	foe.statuses.erase("prone")
+	card.refresh()
+	await process_frame
+	check(not _text(card).contains("Prone"), "a condition ending leaves the card")
+
+	# Down: death saves, as a chip of the card's own.
+	hero.hp = 0
+	hero.statuses["down"] = true
+	hero.death_s = 1
+	hero.death_f = 2
+	card.show_who(hero, cb)
+	await process_frame
+	check(_text(card).contains("saves 1/2"), "a downed hero shows their death saves")
+	check(_tips(card).size() > 0, "and the verb chips are still counted apart from the effect chips")
+	card.queue_free()
+	await process_frame
+
+
+# The tooltips of the effect chips (a PanelContainer around a row, not around a
+# bare Label, which is what tells them from the verb chips _tips reads).
+func _effect_tips(n: Node) -> Array:
+	var out: Array = []
+	if n is PanelContainer and n.mouse_filter == Control.MOUSE_FILTER_STOP \
+			and n.get_child_count() == 1 and n.get_child(0) is HBoxContainer:
+		out.append(n.tooltip_text)
+	for c in n.get_children():
+		out.append_array(_effect_tips(c))
+	return out
 
 
 # [label, tooltip] for every chip that takes the mouse.
