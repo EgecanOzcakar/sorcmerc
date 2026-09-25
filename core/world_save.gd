@@ -24,6 +24,9 @@
 #   "version": 1,
 #   "elapsed": 742.5,                 // World.clock.elapsed, world-minutes
 #   "opinion": {"soldier": -12.0},    // FactionOpinion.all()
+#   "grudges": {"gnoll": 20.0},       // Grudges.all() (#231): the monster peoples' side
+#   "routes": { <WorldRoutes.to_dict()> },   // #231: {} on a free-roaming world
+#   "route_walked": 1450.0,           // #231: the road's odometer
 #   "ladder": {"deeds": {"human": 13}, "audiences": ["human"]},   // Ladder.all()
 #   "origin": {"kind": "procedural", "seed": 42, "homes": true},   // which builder made this map;
 #                                     // "homes": its lair-for-every-people pass is done (core/world_homes.gd)
@@ -69,6 +72,8 @@ const RNG = preload("res://core/rng.gd")
 const Party = preload("res://core/party.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const FactionOpinion = preload("res://core/faction_opinion.gd")
+const Grudges = preload("res://core/grudges.gd")
+const WorldRoutes = preload("res://core/world_routes.gd")
 const Ladder = preload("res://core/ladder.gd")
 const PartyOpinion = preload("res://core/party_opinion.gd")
 const Callings = preload("res://core/callings.gd")
@@ -245,6 +250,9 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		"elapsed": world.clock.elapsed,
 		"bands_refilled_at": world.bands_refilled_at,   # #163
 		"opinion": FactionOpinion.all(),
+		"grudges": Grudges.all(),
+		"routes": world.routes.to_dict() if world.routes != null else {},
+		"route_walked": world.route_walked,
 		"ladder": Ladder.all(),
 		"origin": {"kind": String(world.origin.get("kind", "small")),
 			"seed": int(world.origin.get("seed", 0)),
@@ -359,10 +367,21 @@ static func from_dict(d: Dictionary):
 	if not bool(origin.get("homes", false)):
 		WorldHomes.backfill(world)
 
+	# #231: a route world keeps its network — the trails its decisions opened
+	# live nowhere else. An old save, or a free-roaming one, has {} and stays
+	# the free plane.
+	var routes = d.get("routes", {})
+	if routes is Dictionary and not routes.is_empty():
+		world.routes = WorldRoutes.from_dict(routes)
+	world.route_walked = float(d.get("route_walked", 0.0))
+
 	FactionOpinion.reset()
 	var opinion: Dictionary = d.get("opinion", {})
 	for faction in opinion:
 		FactionOpinion.set_opinion(String(faction), float(opinion[faction]))
+	# Global like opinion, and for the same reason; an old save holds no grudge.
+	var grudges = d.get("grudges", {})
+	Grudges.load_all(grudges if grudges is Dictionary else {})
 	# The ladder (core/ladder.gd) is process-global like opinion; a save from
 	# before it had one loads as strangers everywhere.
 	Ladder.load(d.get("ladder", {}))

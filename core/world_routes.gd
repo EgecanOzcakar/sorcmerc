@@ -300,12 +300,14 @@ func attach(world, kind: String, ref: String, pos: Vector2, known: bool) -> Stri
 
 # The closest point on any edge that `pos` can walk to over dry ground, as
 # {edge, seg, point, offset, distance}; {} when there is none. Points on a
-# spur the node itself would own are skipped (`self_id`).
-func _nearest_on_network(world, pos: Vector2, self_id: String) -> Dictionary:
+# spur the node itself would own are skipped (`self_id`), and with
+# `known_only` so is every edge the company has not found — a place an outcome
+# shows the company hangs off a road it can walk, not off a lair's hidden track.
+func _nearest_on_network(world, pos: Vector2, self_id: String, known_only := false) -> Dictionary:
 	var cands: Array = []
 	for eid in edges:
 		var e: Dictionary = edges[eid]
-		if e["a"] == self_id or e["b"] == self_id:
+		if e["a"] == self_id or e["b"] == self_id or (known_only and not e["known"]):
 			continue
 		var at := _closest_on(e, pos)
 		at["edge"] = eid
@@ -608,7 +610,7 @@ func open_place(world, kind: String, ref: String, pos: Vector2, from := "", why 
 		return id
 	_add_node(id, kind, ref, pos, known, why)
 	if from == "" or open_route(world, from, id, why, known).is_empty():
-		var at := _nearest_on_network(world, pos, id)
+		var at := _nearest_on_network(world, pos, id, known)
 		if not at.is_empty():
 			_hang(world, id, at)
 	return id

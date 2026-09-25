@@ -80,7 +80,9 @@ const NO_KIT_TEXT := "There is no camp kit in the stash, no Rope Trick cast, and
 # which hears it whatever the watch rolled — says who gets the first round.
 # Either way the camp spells are spent and their holds let go. `rng` rides out
 # on the result because the screen's fireside reads the same stream after.
-static func make_camp(party, world, radius: float, each := Callable()) -> Dictionary:
+# `ambush_pct` is AMBUSH_CHANCE_PCT unless the caller knows better: on the roads
+# (#231) a camp is as risky as its stretch (RouteTravel.camp_ambush_pct).
+static func make_camp(party, world, radius: float, each := Callable(), ambush_pct := AMBUSH_CHANCE_PCT) -> Dictionary:
 	if not Visit.can_long_rest(party, world):
 		return {"ok": false, "why": "tired", "text": TIRED_TEXT}
 	if hostile_near(world, radius):
@@ -105,7 +107,7 @@ static func make_camp(party, world, radius: float, each := Callable()) -> Dictio
 	# The hollow is not rolled for at all, so its night draws nothing off the
 	# stream: the fireside after it reads the same dice a kit's quiet night would.
 	var out := {"ok": true, "roped": roped, "hollow": hollow, "alarm": alarm, "rng": rng,
-		"ambush": false if hollow else ambush_roll(rng)}
+		"ambush": false if hollow else ambush_roll(rng, ambush_pct)}
 	if not out["ambush"]:
 		out["rest"] = Visit.rest(party, world, "long-rest", each)
 	else:
@@ -116,10 +118,10 @@ static func make_camp(party, world, radius: float, each := Callable()) -> Dictio
 	party.camp_holds.clear()   # the camp they paid for is made: the next long rest gives the slots back
 	return out
 
-static func ambush_roll(rng = null) -> bool:
+static func ambush_roll(rng = null, pct := AMBUSH_CHANCE_PCT) -> bool:
 	if rng == null:
 		rng = RNG.new()
-	return rng.roll_die(100) <= AMBUSH_CHANCE_PCT
+	return rng.roll_die(100) <= pct
 
 # The party's one shot at noticing it coming: best of Survival or Perception,
 # same "whoever's best represents the group" shape as WorldLairs.search()'s
