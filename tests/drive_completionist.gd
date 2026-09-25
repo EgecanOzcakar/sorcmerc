@@ -264,6 +264,18 @@ func _step(n := 1) -> void:
 		if screen._moment != null:
 			did("fight:trait_moment")
 			screen._moment._skip_or_advance()
+		# #118's "somebody can level up" page, when a fight's XP banked a level.
+		# Spending it is the party screen's subject, not this tour's, so the
+		# robot does what a player putting it off does: "Not now". Left up, it
+		# is an overlay (world.gd's _overlay_up), and every march order and
+		# every town gate after it is refused — the rest of the tour times out
+		# on walks that never start, one run in twenty, whenever the unseeded
+		# fights before it happened to pay out a level.
+		if screen._levelup_panel != null:
+			for b in screen._levelup_panel.find_children("*", "Button", true, false):
+				if String(b.text).begins_with("Not now"):
+					b.pressed.emit()
+					break
 		if screen._combat != null:
 			_fight_frame()
 
@@ -338,6 +350,21 @@ func _see_the_fight_out() -> void:
 
 # A march order, given the way a player gives one: put the place on screen and
 # click it.
+#
+# Unless a band the company has already met and parted with is standing on it.
+# A click on a band's figure is an order to go and meet that band (world.gd's
+# _seek), whatever is under it, and asking for a meeting by name overrides a
+# truce and a slip on purpose. A FRESH band on the spot is fine — the wolves
+# that hunt the dwarf camp stand on its gate, and meeting them is the road
+# doing its job; the click meets them, the meeting resolves, the next click is
+# the town. A band already parted with is not: it loiters where it was left
+# (its truce keeps it off the company, not off the town), the click meets it
+# again, the meeting ends in a halt, the halt keeps the clock stopped, a stopped
+# clock keeps the band where it stands, and the next click lands on it again —
+# 1200 frames of the same card, and a red run whenever the unseeded fights
+# before it happened to leave a band there (one run in nine). A player does the
+# obvious thing: lets the clock run, with the HUD's own button, until the band
+# has gone about its business, and clicks the town then.
 func _order(at: Vector2) -> void:
 	if screen._combat != null or not screen._visit.is_empty() or screen._overlay_up():
 		return
@@ -346,6 +373,11 @@ func _order(at: Vector2) -> void:
 	e.button_index = MOUSE_BUTTON_LEFT
 	e.pressed = true
 	e.position = screen._pix(at)
+	var band = screen._band_at(e.position)
+	if band != null and (screen._slipped.has(band.id) or WorldAI.in_truce(band, screen.world.clock.elapsed)):
+		if screen.world.clock.is_paused():
+			screen._toggle_pause()
+		return
 	screen._gui_input(e)
 
 # Walk to a point. Re-orders after every halt, because arriving, fighting and
