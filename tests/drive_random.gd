@@ -307,7 +307,9 @@ func _watch() -> void:
 		if String(party.callings[id]["state"]) == "done" and not _callings_done.has(id):
 			_callings_done[id] = true
 			_saw["calling:done"] = true
-			var item := String(Callings.templates()[party.callings[id]["id"]]["item"])
+			# The hero's own past, not the background's first: since the design
+			# audit's §2.5 a background has two or three, each with its own heirloom.
+			var item := String(Callings.template_for(party.callings[id]).get("item", ""))
 			if party.stash_count(item) < 1:
 				fail("%s's calling is done and its heirloom (%s) is not in the stash" % [id, item])
 	for ch in party.party_characters():
