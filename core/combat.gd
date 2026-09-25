@@ -54,6 +54,18 @@ var _said: Dictionary = {}
 # bands — both sides are strangers, and one of them is only called "party"
 # because Encounter.build only ever spawns the foe side.
 var tracked := true
+# #227: does this fight make any noise? False for the same off-screen fights
+# `tracked` is false for, and for a different reason: those are resolved from
+# the MAP screen, where the Audio autoload is live (a test's headless run has
+# none, which is why the suite never heard them), so every kill, collapse and
+# miss of two bands the player never saw fight rang out over the campaign map
+# in one frame. Every sting this file plays goes through _sfx() below, and the
+# bark's voice is gated beside it, so one flag silences a whole fight. Kept
+# apart from `tracked` because the two can come apart: a fight that counts but
+# is not heard (a future auto-resolve of the player's own) is a fair thing to
+# want. Cosmetic only — never read by anything that resolves, so it is outside
+# Coop.state_hash on purpose.
+var audible := true
 # Per-fight bookkeeping for the achievements that are about a whole fight
 # rather than a single blow: the two ends of the die, and a turn's body count.
 var _saw_nat20 := false
@@ -164,7 +176,7 @@ func _spawn_wave(roster: Array) -> void:
 			i += 1
 	if not names.is_empty():
 		log.append("More of them, from the far side: %s." % ", ".join(names))
-		Sound.play_sfx("wave_arrives")
+		_sfx("wave_arrives")
 
 # The deeds that are a matter of standing somewhere — reaching the captive,
 # reaching the road — checked after every hero move and at every turn's end.
@@ -177,7 +189,7 @@ func _objective_touch(c) -> void:
 			if cap != null and not cap.has("freed") and not cap.is_dead() and Hex.distance(c.pos, cap.pos) <= 1:
 				cap.statuses["freed"] = true
 				log.append("%s cuts %s loose." % [c.cname, cap.cname])
-				Sound.play_sfx("captive_freed")
+				_sfx("captive_freed")
 		"breakout":
 			if objective_done:
 				return
@@ -197,7 +209,7 @@ func _quarry_escape(q) -> void:
 	q.hp = 0
 	objective_failed = true
 	log.append("%s is into the trees and gone." % q.cname)
-	Sound.play_sfx("quarry_gone")
+	_sfx("quarry_gone")
 
 func _objective_over() -> bool:
 	return objective_done and objective_kind() in ["hold", "breakout", "hunt"]
@@ -290,6 +302,12 @@ func _init(_rng, _combatants: Array, _board: Dictionary) -> void:
 const BARK_SFX := {"hit": "hit", "crit": "crit", "kill": "kill", "down": "down",
 	"low_hp": "", "victory": "victory"}
 
+# #227: the one door every sting in this file goes out through, so `audible`
+# is one check rather than thirteen.
+func _sfx(id: String) -> void:
+	if audible:
+		Sound.play_sfx(id)
+
 # Fire a bark for `c` on `trigger` ("hit" | "crit" | "kill" | "low_hp" | "down" |
 # "victory" | "partner_down"). Cosmetic: never gates, never touches the combat RNG,
 # never fails loudly.
@@ -300,7 +318,7 @@ const BARK_SFX := {"hit": "hit", "crit": "crit", "kill": "kill", "down": "down",
 func bark(c, trigger: String, sfx := "", ally := "") -> void:
 	var sound: String = sfx if sfx != "" else BARK_SFX.get(trigger, "")
 	if sound != "":
-		Sound.play_sfx(sound)   # before the returns below: sound plays even in a fast run
+		_sfx(sound)   # before the returns below: sound plays even in a fast run
 	if _bark_rng == null or c == null:
 		return
 	var faction := ""
@@ -312,7 +330,10 @@ func bark(c, trigger: String, sfx := "", ally := "") -> void:
 	if text == "":
 		return
 	# T31: a line never fires silently — pair it with this speaker's gibberish stinger.
-	Sound.play_bark(Barks.voice(c.team, faction) + str(_bark_rng.roll_die(Barks.VARIANTS)))
+	# The variant is rolled heard or not, so a silent fight's bark stream is the same one.
+	var voice: String = Barks.voice(c.team, faction) + str(_bark_rng.roll_die(Barks.VARIANTS))
+	if audible:
+		Sound.play_bark(voice)
 	barks.append({"id": c.id, "text": text})
 	if barks.size() > BARK_QUEUE_MAX:
 		barks.pop_front()
@@ -465,7 +486,7 @@ func destroy_object(o: Dictionary, by = null) -> void:
 		h.get("damage_type", "fire")])
 	if tracked and by != null and by.team == "party":
 		Ach.unlock("explosive")
-	Sound.play_sfx("burst")
+	_sfx("burst")
 	for c in combatants:
 		if c.conscious() and Hex.distance(c.pos, o["pos"]) <= 1:
 			_apply_damage(c, dmg, String(h.get("damage_type", "")), false, by)
@@ -1686,7 +1707,7 @@ func cast(caster, v: Dictionary, target) -> Dictionary:
 		_mark_active(caster)   # forcing a save keeps a Rage going (2024)
 	# T27: past the slot check, so a refused cast is silent. T9z: the school
 	# picks the sting — evocation booms, necromancy drones, abjuration chimes.
-	Sound.play_sfx(WeaponSfx.for_spell(String(v.get("spell", ""))))
+	_sfx(WeaponSfx.for_spell(String(v.get("spell", ""))))
 	if tracked and caster.team == "party":
 		Ach.bump("spells")
 		Ach.collect("schools", String(Catalog.spell(String(v.get("spell", ""))).get("school", "")))
@@ -1906,7 +1927,7 @@ func _spell_hit(c, v: Dictionary, notation: String, dc: int, caster = null) -> D
 	# through the line above, and firing save_failed on it would put a second
 	# sting under every magic missile.
 	if v.get("save", "") != "":
-		Sound.play_sfx("save_made" if saved else "save_failed")
+		_sfx("save_made" if saved else "save_failed")
 	# Only a save-or-suffer effect lands a condition. The raw parse also tags
 	# buffs (Invisibility, Freedom of Movement) with `conditions` and no save —
 	# those are tier-2 ally buffs, not something to inflict on the target here.
@@ -2148,7 +2169,7 @@ func gain_exhaustion(c, levels := 1) -> int:
 		if tracked:
 			Ach.unlock("exhaust_death")
 		log.append("%s collapses, spent." % c.cname)
-		Sound.play_sfx("collapse")   # before _kill, so it is not buried under the kill sting
+		_sfx("collapse")   # before _kill, so it is not buried under the kill sting
 		_kill(c)
 	return lvl
 
@@ -2189,7 +2210,7 @@ func apply_condition(target, cond: String, source = null, duration := "", v: Dic
 	var already: bool = target.statuses.has(cond)
 	target.statuses[cond] = s if not s.is_empty() else true
 	if not already:
-		Sound.play_sfx("condition")
+		_sfx("condition")
 
 # --- concentration ---------------------------------------------------
 #
@@ -2906,7 +2927,7 @@ func resolve_attack(attacker, target, opts := {}) -> Dictionary:
 		# in silence, so the only thing you ever heard was your own successes.
 		# Straight to play_sfx rather than through bark(): there is no "miss"
 		# bark trigger and adding one would put a line of dialogue on every whiff.
-		Sound.play_sfx(WeaponSfx.for_miss(attacker))
+		_sfx(WeaponSfx.for_miss(attacker))
 	if not opts.get("no_mastery", false):
 		_mastery_rider(attacker, target, hit)
 	return out
@@ -3266,7 +3287,7 @@ func _kill(c) -> void:
 	c.hp = 0
 	if c.has("bystander"):
 		objective_failed = true   # whoever it was, they were the point
-		Sound.play_sfx("carter_down")   # the captive too: one stinger for the point of the fight going down
+		_sfx("carter_down")   # the captive too: one stinger for the point of the fight going down
 	if c.has("quarry") and not c.has("escaped"):
 		objective_done = true
 		log.append("The quarry is down — the rest break and run.")
@@ -3350,7 +3371,7 @@ func _death_save(c) -> void:
 func heal(c, amount: int, by = null) -> void:
 	if c.is_dead():
 		return
-	Sound.play_sfx("heal")   # T27
+	_sfx("heal")   # T27
 	var revived = c.is_down()
 	if revived:
 		c.statuses.erase("down")

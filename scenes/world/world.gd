@@ -239,6 +239,11 @@ const LAIR_RADIUS := 14.0
 const LANDMARK_RADIUS := 10.0
 const PLAYER_RADIUS := 11.0
 const BAND_RADIUS := 9.0
+# #229: the ring round two bands locked in a clash. They met no further apart
+# than ENCOUNTER_RADIUS (a fast clock can stretch _trigger() past it, but not by
+# more than the bands' own footprints), and the ring sits on the midpoint, so
+# half of that plus one band's footprint takes both of them in.
+const CLASH_RADIUS := ENCOUNTER_RADIUS * 0.5 + BAND_RADIUS
 # How far the ring stands off the model inside it. Just past the square root of
 # two, and that is the whole of the reason for the number: footprint_of()
 # measures the model's half-span on its widest axis, and a settlement diorama's
@@ -605,8 +610,10 @@ func _process(delta: float) -> void:
 		_gauged_at = world.clock.elapsed
 	WorldAI.update(world, delta)
 	_check_encounter(dt)
-	# O5: NPC-vs-NPC meetings resolve instantly, no scene, no pause — but not
-	# while the player's own fight has the map frozen.
+	# O5: NPC-vs-NPC meetings, no scene, no pause — but not while the player's
+	# own fight has the map frozen. #229: a meeting now locks the two bands in
+	# a clash for the fight's rounds on the clock, and what comes back here is
+	# the fights that have just ENDED, not the ones that just began.
 	if _combat == null and not world.clock.is_paused():
 		# O6 feeds off the outcome: a settlement near the corpses reads differently
 		# on the next visit. O5's resolution itself is untouched.
@@ -1555,12 +1562,29 @@ func _check_encounter(dt := 0.0) -> void:
 			continue   # met by clicking it, never by standing next to it
 		if WorldAI.in_truce(q, world.clock.elapsed):
 			continue   # met and parted without blood: they want nothing from you for a while
+		# #229: locked in a fight with another band — it has its hands full, and
+		# the party may stand and watch or walk on by. When the fight ends the
+		# winner is an ordinary band again, and this loop meets it as one.
+		if not world.clash_of(q).is_empty():
+			continue
 		if near:
 			_meet(q, hostile)
 			return
 
 # The card, or — for a hostile band in the dark — whatever the watch makes of it.
 func _meet(q, hostile: bool) -> void:
+	# #229: a band locked in a fight with another (core/world_battle.gd) is met
+	# by nobody until it is over. Its figure cannot be clicked (_band_at), but a
+	# band the party was already following or chasing can fall into a clash
+	# before the party reaches it — then the march stops at the edge of the
+	# fight. The winner can be met like any band afterwards.
+	var clash: Dictionary = world.clash_of(q)
+	if not clash.is_empty():
+		var other = WorldBattle.other_side(world, clash, q)
+		_camp_msg.text = "%s are locked in a fight%s — nobody will stop to talk until it's over." % [
+			EnemyNames.upper_first(EnemyNames.band_name(q, world)),
+			"" if other == null else " with " + EnemyNames.band_name(other, world)]
+		return
 	if hostile and world.clock.is_night() and not _night_jump(q):
 		return
 	_open_approach(q, hostile)
@@ -1585,6 +1609,11 @@ func _band_at(sp: Vector2):
 	var h: float = Party3D.TARGET_HEIGHT * ISO_GAIN * _zoom
 	for q in world.parties:
 		if q == p or q.is_player or not world.band_seen(q.position):
+			continue
+		# #229: a band locked in a clash is not a thing to meet, so its figure is
+		# not a thing to click — a click on it is a click on the ground there,
+		# and the party marches up to watch.
+		if not world.clashes.is_empty() and not world.clash_of(q).is_empty():
 			continue
 		var at := _pix(q.position)
 		if _in_model_box(sp, at, h):
@@ -1806,6 +1835,8 @@ func encounter_spec(foe, difficulty := "") -> Dictionary:
 # room (core/site.gd) can run a fight with its own pre-built spec without also
 # inheriting the roaming-band aftermath below — erasing a party that was never
 # on the map, crediting faction opinion for a room in a cave.
+# #229: NOT the rate a band-vs-band clash is told at — that is
+# WorldBattle.MINUTES_PER_ROUND, and its comment says why the two differ.
 const MINUTES_PER_ROUND := 60.0
 
 func _run_combat(spec: Dictionary, difficulty: String,
@@ -5890,10 +5921,27 @@ func ground_marks() -> Array:
 		# everyone else's off their troops[] flavour roster.
 		var count: int = party.active.size() if q.is_player else q.troops.size()
 		var who: String = "You" if q.is_player else EnemyNames.upper_first(EnemyNames.band_name(q, world))
+		# #229: a band in a clash says so, and how far in it is — the fight is
+		# being told an hour a round, and the label is where the hours show.
+		var fighting: Dictionary = {} if q.is_player else world.clash_of(q)
+		var tag: String = "" if fighting.is_empty() else " · fighting, round %d/%d" % [
+			WorldBattle.round_of(fighting, world.clock.elapsed), int(fighting["rounds"])]
 		out.append({"pos": q.position, "radius": rad,
 			"color": _remembered(faction_color(q.faction, q.is_player), live),
 			"ring": 0.0, "fill": 0.0, "shadow": 1.0,
-			"label": "%s (%d)" % [who, count], "live": live})
+			"label": "%s (%d)%s" % [who, count, tag], "live": live})
+	# #229: the ground the two bands are fighting over, ringed in the foe's
+	# red and throbbing, so a battle reads from across the map before the
+	# labels do. Fog-gated like the bands themselves.
+	for c in world.clashes:
+		var at: Vector2 = c["at"]
+		if not world.band_seen(at):
+			continue
+		var live: bool = world.is_visible_now(at, ppos)
+		var throb: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
+		out.append({"pos": at, "radius": CLASH_RADIUS,
+			"color": _remembered(Color(Icons.COL_FOE, 0.55 + 0.4 * throb), live),
+			"ring": 0.10 + 0.06 * throb, "fill": 0.12, "shadow": 0.0, "live": live})
 	return out
 
 

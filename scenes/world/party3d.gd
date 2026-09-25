@@ -129,6 +129,16 @@ const SWAY_RAD := 0.045       # ~2.6° of trunk roll, alternating with the strid
 const LEAN_RAD := 0.035       # ~2° of steady pitch into the direction of travel — a body pushing forward, not a statue sliding
 const GAIT_RAMP := 4.0        # gait weight per second: ~0.25s to spin up and the same to settle, so stopping eases into the idle pose
 const IDLE_SPEED_GAIN := 0.35 # the idle clip runs up to 35% faster while moving — nudged along with the motion rather than fought
+# #229: a band locked in a clash (core/world_battle.gd) stands still for hours
+# of world time, and a figure that just idles there reads as two bands who
+# happen to be standing close. So it squares up to the fight — faces the middle
+# of it — and lunges at it: a hard forward jab on a fast cadence, the same
+# procedural stand-in the walk is, for the same reason (the models ship one
+# idle clip and nothing to swing). Real seconds, not world ones, like the gait:
+# it is how a fight LOOKS, and 8x should not turn it into a vibration.
+const BRAWL_HZ := 1.8         # lunges per second, each side on its own desynced phase
+const BRAWL_LUNGE := 1.6      # world units forward at the height of a lunge, ~10% of TARGET_HEIGHT
+const BRAWL_LEAN := 0.22      # ~12° of pitch into the blow
 
 var _figs := {}                # party id -> Node3D (every band has one)
 var _models := {}              # ...of those, the ids wearing a real character model, not the pawn
@@ -216,6 +226,25 @@ func reset(world) -> void:
 		_figs[p.id] = holder
 
 
+# #229: square up to the clash `p` is in and lunge at it; nothing for a band
+# that is not fighting. After the gait, and over it: a band in a clash does
+# not move, so its gait has already settled to the rest pose.
+func _brawl(n: Node3D, p, here: Vector3) -> void:
+	var clash: Dictionary = world_map.world.clash_of(p)
+	if clash.is_empty():
+		return
+	var to: Vector3 = at(clash["at"]) - here
+	to.y = 0.0
+	if to.length() < 0.01:
+		return
+	var dir := to.normalized()
+	n.rotation.y = lerp_angle(n.rotation.y, atan2(dir.x, dir.z), 0.2)
+	var ph: float = Time.get_ticks_msec() * 0.001 * BRAWL_HZ * TAU + float(_step.get(p.id, 0.0))
+	var jab: float = pow(maxf(0.0, sin(ph)), 3.0)   # a sharp strike and a longer recovery, not a sway
+	n.position += dir * BRAWL_LUNGE * jab
+	n.rotation.x = BRAWL_LEAN * jab
+
+
 # One party's walk for this frame, advanced by `dt` seconds at `speed` map
 # units/second: returns the pose to hold as (bob height, sway roll, forward
 # lean). Split out of reposition() because it is the entire stand-in in one
@@ -296,6 +325,8 @@ func reposition() -> void:
 		n.position = here + Vector3(0.0, pose.x, 0.0)   # pose.x: the bob
 		n.rotation.z = pose.y                         # pose.y: the sway, a roll about the figure's own forward axis
 		n.rotation.x = pose.z                         # pose.z: the lean, a pitch into the direction of travel
+		if not p.is_player:
+			_brawl(n, p, here)
 		# Let the idle clip hurry along with the body instead of fighting it —
 		# it keeps its own desynced phase, only the rate moves.
 		var ap: AnimationPlayer = _aps.get(p.id)

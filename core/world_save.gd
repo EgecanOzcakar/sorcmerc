@@ -39,6 +39,8 @@
 #      "goal": [80, 120], "speed": 40.0,
 #      "ai": { <core/world_ai.gd's state dict, Vector2s and RNGs encoded, see _enc> }}
 #   ],
+#   "clashes": [{"a": "raiders", "b": "patrol", "winner": "patrol", "outcome": "Defeat",
+#     "rounds": 4, "at": [40, 0], "from": 700.0, "until": 940.0}],  // #229 fights in progress
 #   "waters": [{"position": [-190, -70], "radius": 100.0}],  // O15 terrain blobs
 #   "explored": [[80, 120], [125, 118]],  // T9x fog of war: World.explored waypoints
 #   "party": {                        // the player's own party: the roster is also in
@@ -262,6 +264,11 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		"fallen": world.fallen.map(func(f): return {"id": f["id"], "faction": f["faction"],
 			"sname": String(f.get("sname", "")),
 			"position": _v(f["position"]), "troops": f["troops"], "at": f["at"]}),
+		# #229: the band-vs-band fights still being told, verdict and all — a reload
+		# mid-battle resumes the same battle rather than re-fighting it.
+		"clashes": world.clashes.map(func(c): return {"a": c["a"], "b": c["b"],
+			"winner": c["winner"], "outcome": c["outcome"], "rounds": c["rounds"],
+			"at": _v(c["at"]), "from": c["from"], "until": c["until"]}),
 		"lairs": lairs,
 		"landmarks": landmarks,
 		"waters": waters,
@@ -313,6 +320,13 @@ static func from_dict(d: Dictionary):
 		world.fallen.append({"id": String(fd["id"]), "faction": String(fd["faction"]),
 			"sname": String(fd.get("sname", "")),
 			"position": _vec(fd.get("position")), "troops": fd.get("troops", []), "at": float(fd.get("at", 0.0))})
+	# #229: an old save has none — every fight it knew of was over in a frame.
+	for cd in d.get("clashes", []):
+		var from := float(cd.get("from", world.clock.elapsed))
+		world.clashes.append({"a": String(cd["a"]), "b": String(cd["b"]),
+			"winner": String(cd.get("winner", cd["a"])), "outcome": String(cd.get("outcome", "")),
+			"rounds": int(cd.get("rounds", 1)), "at": _vec(cd.get("at")),
+			"from": from, "until": float(cd.get("until", from))})
 	for ld in d.get("lairs", []):
 		var l := World.Lair.new(String(ld["id"]), _vec(ld.get("position")),
 			String(ld.get("faction", "goblinoid")), String(ld.get("sname", "")))
