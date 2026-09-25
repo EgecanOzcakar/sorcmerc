@@ -599,13 +599,11 @@ func _the_city() -> void:
 	await _step(2)
 	check("town:leave", screen._visit.is_empty() and screen._visit_panel == null,
 		"Leave did not close the market")
-	# A hostile band that walked up to the gate while the company slept (the
-	# night is stepped through the world, core/world_rest.gd) opens its approach
-	# card the moment the company steps out, and that card holds the clock, not
-	# Leave. Which bands are near the gate by then depends on the whole map's
-	# population; since the Far Deeps' pass (2026-09-25: more lairs, three more
-	# band kinds) this run's night ends with the hand-placed bandits and goblins
-	# at Riverhold's gate.
+	# A band waiting at the gate takes the clock straight back, and that is the
+	# map working, not Leave failing: since the design audit's §1.7 a night at
+	# the inn walks the world, and on a slow machine (the frames also run on
+	# real time) a hunter can reach the walls by morning. The walk that follows
+	# answers the card (_walk_into's _meet_them).
 	if screen.world.clock.is_paused() and not screen._halted_on_arrival \
 			and not is_instance_valid(screen._approach_card):
 		fail("town:leave — Leave did not give the world clock back")
