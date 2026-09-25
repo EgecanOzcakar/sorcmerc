@@ -26,3 +26,10 @@ this repository.
 | `durn.png` | 2026-09-21 `7b60b59` | 12813 | P | N9 | Durn Stonewake, a grim dwarven column-captain, short and broad with a thick grey braided beard and small round human-shaped ears, dented plate, a scarred face and a captain's baton, banners and cold mountain road behind |
 | `hale.png` | 2026-09-16 `b2ffa48` | 11709 | P | N4 | Warden Hale, a weathered human man warden of a mountain gate fort, worn mail and a heavy cloak, ink on his fingers, snow on the battlements behind |
 | `vessa.png` | 2026-09-16 `b2ffa48` | 11712 | P | N4 | Vessa of the Nine Coals, a striking woman with ember-red eyes and dark robes stitched with nine glowing coals, speaker for crown-seekers, a vault door glowing behind |
+
+## Licence
+
+All three name `sd_xl_base_1.0.safetensors` in their `prompt` chunk (checked
+2026-09-25). SDXL 1.0 is published under the CreativeML Open RAIL++-M licence, which
+puts use restrictions on the model and not an ownership claim on its output. Read it
+before the store page is filled in.

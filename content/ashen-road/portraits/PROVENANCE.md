@@ -26,3 +26,10 @@ this repository.
 | `maera.png` | 2026-09-21 `7b60b59` | 12611 | P | N3 | Maera Vulk, a stern middle-aged human woman reeve of a burned frontier town, plain wool and a chain of office, ledger under her arm, tired sharp eyes, ash on the wind behind her |
 | `oss.png` | 2026-09-16 `b2ffa48` | 11703 | P | N4 | Oss Tallow, a wiry young goblin in patched leathers who ran from a burning warren, quick eyes, a knife at the belt, defiant, firelit ruins behind |
 | `sigrun.png` | 2026-09-16 `b2ffa48` | 11706 | P | N4 | Sigrun Barrowkeep, an ancient grey-haired human woman keeper of a barrow of kings, heavy furs and a great iron key, unbending, a stone doorway behind her |
+
+## Licence
+
+All three name `sd_xl_base_1.0.safetensors` in their `prompt` chunk (checked
+2026-09-25). SDXL 1.0 is published under the CreativeML Open RAIL++-M licence, which
+puts use restrictions on the model and not an ownership claim on its output. Read it
+before the store page is filled in.

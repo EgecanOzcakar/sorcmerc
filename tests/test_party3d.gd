@@ -48,6 +48,18 @@ func _init() -> void:
 		"by default the player wears their highest-level member's figure, not the pawn")
 	check(goblins != null and main._party3d.has_model(goblins),
 		"goblinoid has no race counterpart, but gets the FOE_MODELS figure combat uses")
+	# human_light_idle.glb was never generated (assets/troops/PROVENANCE.md): a
+	# human band led by a light troop wears the human heavy figure, not the pawn.
+	for fac in ["human", "bandit", "soldier"]:
+		var light := World.RoamingParty.new("light-" + fac, Vector2.ZERO, fac)
+		light.troops = [{"role": "light", "level": 5}, {"role": "heavy", "level": 1}]
+		var path: String = main._party3d._model_path(light)
+		check(path == "res://assets/troops/human_heavy_idle.glb" and ResourceLoader.exists(path),
+			"a %s band led by a light troop wears the human heavy troop (%s)" % [fac, path])
+	for race in Party3D.MODELS:
+		for role in Party3D.MODELS[race]:
+			check(ResourceLoader.exists(String(Party3D.MODELS[race][role])),
+				"every troop model named is on disk: %s %s" % [race, role])
 
 	# T9x: picking a figure on the Party screen (core/party.gd's
 	# overworld_figure) gets the player a real Party3D model too — but the

@@ -61,9 +61,18 @@ const RACE_FOR_FACTION := {
 const MODELS := {
 	"dwarf": {"heavy": "res://assets/troops/dwarf_heavy_idle.glb", "light": "res://assets/troops/dwarf_light_idle.glb", "spellcaster": "res://assets/troops/dwarf_spellcaster_idle.glb"},
 	"elf": {"heavy": "res://assets/troops/elf_heavy_idle.glb", "light": "res://assets/troops/elf_light_idle.glb", "spellcaster": "res://assets/troops/elf_spellcaster_idle.glb"},
-	"human": {"heavy": "res://assets/troops/human_heavy_idle.glb", "light": "res://assets/troops/human_light_idle.glb", "spellcaster": "res://assets/troops/human_spellcaster_idle.glb"},
+	"human": {"heavy": "res://assets/troops/human_heavy_idle.glb", "spellcaster": "res://assets/troops/human_spellcaster_idle.glb"},
 	"orc": {"heavy": "res://assets/troops/orc_heavy_idle.glb", "light": "res://assets/troops/orc_light_idle.glb", "spellcaster": "res://assets/troops/orc_spellcaster_idle.glb"},
 }
+# A species with no figure for a role wears its heavy troop instead. Human has
+# no light troop: the first Meshy batch ran out of credits after eight of
+# twelve and human_light_idle.glb was never made (assets/troops/PROVENANCE.md).
+# The entry used to name the missing file anyway, so a human, bandit or soldier
+# band led by a light troop found nothing on disk and marched as the pawn.
+# Heavy rather than spellcaster: a light-armoured troop is a fighter too, and
+# at map zoom the armour is the smaller difference. Generating the file and
+# putting the entry back retires this.
+const ROLE_STAND_IN := "heavy"
 const TARGET_HEIGHT := 15.0   # a person, not a building — smaller than any settlement/lair tier
 
 # --- the pawn -------------------------------------------------------------
@@ -145,7 +154,8 @@ func _model_path(p) -> String:
 	var race := String(RACE_FOR_FACTION.get(p.faction, ""))
 	var role := String(p.highest_troop().get("role", ""))
 	if race != "" and role != "":
-		var by_role := String(MODELS.get(race, {}).get(role, ""))
+		var kit: Dictionary = MODELS.get(race, {})
+		var by_role := String(kit.get(role, kit.get(ROLE_STAND_IN, "")))
 		if by_role != "":
 			return by_role
 	# Monster factions (goblinoid, bandit, undead, ...): no race/role, one
