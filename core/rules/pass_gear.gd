@@ -2,7 +2,8 @@
 # v1 scope: weapons.json + armor.json, plus magic-items.json ids as kind "magic"
 # rows whose mechanics are core/rules/pass_items.gd's (a magic shield resolves
 # here as the shield it is, 2026-09-25). The export ships no gear/packs/bundles
-# (SCHEMA gaps #1, #2, #6), so bundle-choice resolves to a warning and unknown item
+# (SCHEMA gaps #1, #2, #6), so a class's bundle-choice is left unresolved on
+# purpose — the creator's Equipment step is what answers it — and unknown item
 # ids become inert rows. Only `ch.equipped` is a character's — everything else the
 # party is carrying lives in Party.stash (T10), which the sheet knows nothing about.
 extends RefCounted
@@ -15,7 +16,8 @@ const MUNDANE_SHIELD := "shield"   # armor.json's one shield, the base a magic s
 
 # {items: Array, warnings: Array[String]}
 # item = {item_id, def, kind: "weapon"|"armor"|"unknown", quantity, equipped, source}
-static func equipment(ch, bundles: Array) -> Dictionary:
+# `_bundles` has gone unread since #189 (below); kept so every pass takes the same shape.
+static func equipment(ch, _bundles: Array) -> Dictionary:
 	var warns: Array[String] = []
 	var items: Array = []
 	var qty := {}
@@ -48,8 +50,16 @@ static func equipment(ch, bundles: Array) -> Dictionary:
 		items.append({"item_id": iid, "def": def, "kind": kind, "quantity": qty[iid],
 			"equipped": iid in ch.equipped, "source": {"origin": "item", "id": iid}})
 
-	for tg in Bundles.of_type(bundles, "bundle-choice"):
-		warns.append("bundle-choice \"%s\" cannot resolve — starting-equipment bundles are not exported (SCHEMA gap #2)" % tg["grant"]["key"])
+	# #189: no warning for a bundle-choice. It used to add one per grant — "cannot
+	# resolve — starting-equipment bundles are not exported (SCHEMA gap #2)" —
+	# to every barbarian, fighter and rogue ever built (four for a fighter), and
+	# the creator's Review page reads sheet.warnings out to the player, so the
+	# most ordinary level-1 fighter walked out of creation wearing four of them.
+	# Nothing is wrong with such a build: the kit is picked off the creator's own
+	# shelf (the Equipment step, proficient_weapons/armor), which is the game's
+	# answer to the gap rather than a hole in it, so a warning was only ever
+	# noise, and noise that trained everyone to skip the list the real ones
+	# (a catalog miss, a BUG: line) land in. The gap itself is data/SCHEMA.md's.
 
 	return {"items": items, "warnings": warns}
 

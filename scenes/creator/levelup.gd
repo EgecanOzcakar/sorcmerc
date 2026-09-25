@@ -336,8 +336,11 @@ func _choices() -> void:
 	# place and stays editable, T34). What earlier levels spent comes after,
 	# under its own caption and dimmed: it is here to be read, not to be
 	# waded through on the way to the one row that is actually open.
-	var mine: Array = sheet.choice_points.filter(func(p): return not _locked.has(p["key"]))
-	var earlier: Array = sheet.choice_points.filter(func(p): return _locked.has(p["key"]))
+	# #190: except that what a feat taken at this level asks for next comes
+	# right after the feat, not above it with its kind (Creator.page_order).
+	var ordered: Array = Creator.page_order(sheet.choice_points, _ch.choices)
+	var mine: Array = ordered.filter(func(p): return not _locked.has(p["key"]))
+	var earlier: Array = ordered.filter(func(p): return _locked.has(p["key"]))
 	for p in mine:
 		_choice_row(p, sheet, false)
 	if not earlier.is_empty():

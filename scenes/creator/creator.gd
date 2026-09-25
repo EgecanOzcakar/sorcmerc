@@ -65,16 +65,20 @@ static func picks_from_decision(p: Dictionary, d) -> Array: return ChoicePick.pi
 const MERGEABLE := ["skill-choice", "language-choice", "tool-choice", "spell-choice"]
 
 # The choice points as display groups, each where its first member stood.
-static func choice_groups(points: Array, sheet = null) -> Array:
+# With `choices`, a list a chosen feat brought only merges with its own feat's
+# others (#190): Skilled's any-three-skills folded into a human's any-skill
+# would put the feat's follow-up back up the page, above the feat.
+static func choice_groups(points: Array, sheet = null, choices: Dictionary = {}) -> Array:
 	var groups: Array = []
 	var by_opts := {}
+	var anchors := feat_anchors(points, choices)
 	for p in points:
 		if not p["type"] in MERGEABLE:
 			groups.append([p])
 			continue
 		var ids: Array = options_for(p, sheet).map(func(o): return String(o["id"]))
 		ids.sort()
-		var k := "%s|%s" % [p["type"], ",".join(ids)]
+		var k := "%s|%s|%s" % [p["type"], ",".join(ids), anchors.get(p["key"], "")]
 		if by_opts.has(k):
 			by_opts[k].append(p)
 		else:
@@ -82,6 +86,65 @@ static func choice_groups(points: Array, sheet = null) -> Array:
 			by_opts[k] = g
 			groups.append(g)
 	return groups
+
+# #190: the choice points in the order a page reads them. The resolver lists
+# them by KIND (pass_pending.gd walks ability picks, then skills, then
+# fighting styles, feature picks, feats, spells...), so what a chosen feat asks
+# for next — Skilled's three skills, Magic Initiate's spell list, a half-feat's
+# +1 — was listed with its kind, and its kind almost always comes first: pick
+# the feat and the follow-up appeared ABOVE it, off the top of the part of the
+# page you were looking at. Here every point a chosen feat brought moves to
+# just after the feat-choice that chose it, in the resolver's order among
+# themselves (Magic Initiate's list pick still comes before its spells).
+# Everything else keeps its place, so picking one still never shuffles the
+# rest. A feat that nobody chose on this page — a background's origin feat, a
+# feat in ch.feats — has no anchor and its points stay where they were.
+static func page_order(points: Array, choices: Dictionary) -> Array:
+	var anchors := feat_anchors(points, choices)
+	var after := {}   # feat-choice key -> the points its feat brought
+	var top: Array = []
+	for p in points:
+		var anchor: String = anchors.get(p["key"], "")
+		if anchor != "":
+			if not after.has(anchor):
+				after[anchor] = []
+			after[anchor].append(p)
+		else:
+			top.append(p)
+	var out: Array = []
+	var emit := func(self_ref: Callable, p: Dictionary) -> void:
+		out.append(p)
+		for q in after.get(p["key"], []):
+			self_ref.call(self_ref, q)
+	for p in top:
+		emit.call(emit, p)
+	# An anchor the page never reached (it cannot happen today — the feat-choice
+	# is always itself a point) must not swallow what it anchors.
+	for k in after:
+		for q in after[k]:
+			if not q in out:
+				out.append(q)
+	return out
+
+# point key -> the key of the feat-choice whose feat brought it; points no
+# feat-choice on this page brought are absent.
+static func feat_anchors(points: Array, choices: Dictionary) -> Dictionary:
+	var chosen_by := {}   # feat id -> the key of the feat-choice that chose it
+	for p in points:
+		if p["type"] != "feat-choice":
+			continue
+		var d = choices.get(p["key"])
+		if d is Dictionary and d.get("type") == "feat-choice":
+			var fid := String(d.get("featId", ""))
+			if fid != "" and not chosen_by.has(fid):
+				chosen_by[fid] = p["key"]
+	var out := {}
+	for p in points:
+		var src: Dictionary = p["source"]
+		if src["origin"] == "feat" and chosen_by.has(String(src["id"])) \
+				and chosen_by[String(src["id"])] != p["key"]:
+			out[p["key"]] = chosen_by[String(src["id"])]
+	return out
 
 # One click on a merged list: a picked option comes off whichever grant holds
 # it; a new one goes to the first grant with room; with every grant full, the
@@ -938,13 +1001,16 @@ func _build_review() -> void:
 # Every choice point the build has reached, optionally filtered to a set of types,
 # in the resolver's own order — a choice keeps its place on the page whether or
 # not it is made yet, so picking one never shuffles the rest under the cursor.
+#
+# #190: "the resolver's own order" with one exception, page_order's — what a
+# chosen feat asks for comes right after the feat, not above it with its kind.
 func _choice_points_of(types: Array) -> Array:
-	return ch.sheet().choice_points.filter(func(p): return types.is_empty() or p["type"] in types)
+	return page_order(ch.sheet().choice_points, ch.choices).filter(func(p): return types.is_empty() or p["type"] in types)
 
 # The points, grouped (#191): a merged group is one widget, the rest one each.
 func _choice_widgets(points: Array) -> void:
 	var sheet = ch.sheet()
-	for g in choice_groups(points, sheet):
+	for g in choice_groups(points, sheet, ch.choices):
 		_choice_widget(g[0], g, points)
 
 func _choice_widget(p: Dictionary, group: Array = [], points: Array = []) -> void:
@@ -1106,15 +1172,33 @@ static func _rule() -> Control:
 
 # The prose half of the sheet: skills, attacks, spells, features — and on the
 # Review page, everything.
+#
+# #188: it read as a wall of text. Skills were one comma-run paragraph ("Animal
+# Handling +3, Athletics +5, Insight +3 E, Perception +3, ...") that wrapped at
+# whatever word the panel's edge fell on, so a skill's bonus was as likely to
+# start the next line as end its own, and the Review page's spells were the
+# same paragraph again. Now anything that is a LIST is laid out as one: skills
+# are a table of name and bonus (two pairs a row beside the steps, three on the
+# Review page, where the column is wide), expertise a gilt ◆ with its key under
+# the table, the way the profile's sheet marks it; spells are a table of
+# names; and the Review page grows the proficiencies it never showed (armor,
+# weapons, tools, languages), a caption to a row, and calls the kit by its
+# names rather than its ids.
 func _sheet_bbcode(full: bool) -> String:
 	var sheet = ch.sheet()
 	var s := ""
-	var sk: Array = []
-	for k in sheet.skill_prof:
-		if sheet.skill_prof[k] != "none":
-			sk.append("%s [color=#f1e6cf]%+d[/color]%s" % [Catalog.skills().get(k, {}).get("name", k),
-				int(sheet.skills[k]), " [color=#c9a45a]E[/color]" if sheet.skill_prof[k] == "expert" else ""])
-	s += _cap("Skills") + "  " + (", ".join(sk) if sk else "[color=#8a7f6e]none[/color]") + "\n"
+	var rows := skill_rows(sheet)
+	s += _cap("Skills") + "\n"
+	if rows.is_empty():
+		s += "[color=#8a7f6e]  none[/color]\n"
+	else:
+		var cells: Array = []
+		for r in rows:
+			cells.append([String(r["name"]) + (" [color=#c9a45a]◆[/color]" if r["grade"] == "expert" else ""),
+				"[color=#f1e6cf]%+d[/color]" % int(r["bonus"])])
+		s += _pair_table(cells, 3 if full else 2)
+		if rows.any(func(r): return r["grade"] == "expert"):
+			s += "[font_size=12][color=#8a7f6e]◆ expertise: proficiency bonus doubled[/color][/font_size]\n"
 	s += _cap("Passive Perception") + "  [color=#f1e6cf]%d[/color]\n[hr color=#7a6234]\n" % sheet.passive_perception
 	s += _cap("Attacks") + "\n"
 	if sheet.attacks.is_empty():
@@ -1132,16 +1216,25 @@ func _sheet_bbcode(full: bool) -> String:
 			String(sc["ability"]).to_upper(), int(sc["save_dc"]), int(sc["attack_bonus"])]
 		s += "  slots: %s\n" % (", ".join(slots) if slots else "[color=#8a7f6e]none[/color]")
 		if full:
-			var known: Array = []
+			var cantrips: Array = []
 			for k in sc.get("cantrips", []):
-				known.append(Icons.spell_bb(k, spell_name(k)))
+				cantrips.append(Icons.spell_bb(k, spell_name(k)))
+			var known: Array = []
 			for k in sc.get("known", []):
 				known.append(Icons.spell_bb(k["id"], spell_name(k["id"])))
 			for k in sc.get("always_prepared", []):
 				known.append(Icons.spell_bb(k, spell_name(k)))
+			if cantrips:
+				s += "[color=#b9ae9b]  cantrips[/color]\n" + _list_table(cantrips, 3)
 			if known:
-				s += "  spells: %s\n" % ", ".join(known)
+				s += "[color=#b9ae9b]  spells[/color]\n" + _list_table(known, 3)
 	if full:
+		s += "[hr color=#7a6234]\n" + _cap("Proficiencies") + "\n[table=2]"
+		for k in [["armor", "Armor"], ["weapon", "Weapons"], ["tool", "Tools"], ["language", "Languages"]]:
+			var ids: Array = sheet.proficiencies.get(k[0], [])
+			s += "[cell padding=6,0,14,2][color=#b9ae9b]%s[/color][/cell][cell expand=1]%s[/cell]" % [k[1],
+				", ".join(ids.map(humanize)) if ids else "[color=#8a7f6e]none[/color]"]
+		s += "[/table]\n"
 		s += "[hr color=#7a6234]\n" + _cap("Features") + "\n"
 		for fid in sheet.features:
 			s += "  · %s [color=#8a8478]%s[/color]\n" % [Effects.verb_label(fid), Effects.feature_source(fid)]
@@ -1150,7 +1243,10 @@ func _sheet_bbcode(full: bool) -> String:
 			for p in sheet.pools:
 				s += "  · %s ×%d\n" % [humanize(p["id"]), int(p["max"])]
 		if not sheet.equipment.is_empty():
-			s += "[hr color=#7a6234]\n" + _cap("Equipment") + "  %s\n" % ", ".join(ch.equipped)
+			var names: Array = []
+			for it in sheet.equipment:
+				names.append(String(it["def"].get("name", humanize(String(it["item_id"])))))
+			s += "[hr color=#7a6234]\n" + _cap("Equipment") + "\n" + _list_table(names, 3)
 	if not sheet.pending.is_empty():
 		s += "[hr color=#7a6234]\n[color=#d15750][b]%d choice%s left[/b][/color]\n" % [sheet.pending.size(), "" if sheet.pending.size() == 1 else "s"]
 		var kinds := {}   # the same kind twice is one line with a count, not two lines
@@ -1167,6 +1263,38 @@ func _sheet_bbcode(full: bool) -> String:
 		for w in sheet.warnings:
 			s += "  %s\n" % w
 	return s
+
+# #188: the build's skills as the sheet lists them — the proficient ones, by
+# name, each {id, name, bonus, grade} where grade is "prof" or "expert".
+# Static and UI-free so tests/test_creator.gd reads the same rows the table does.
+static func skill_rows(sheet) -> Array:
+	var out: Array = []
+	for k in sheet.skill_prof:
+		if sheet.skill_prof[k] == "none":
+			continue
+		out.append({"id": k, "name": String(Catalog.skills().get(k, {}).get("name", humanize(k))),
+			"bonus": int(sheet.skills.get(k, 0)), "grade": String(sheet.skill_prof[k])})
+	out.sort_custom(func(a, b): return String(a["name"]).naturalnocasecmp_to(String(b["name"])) < 0)
+	return out
+
+# #188: [label, value] pairs as a table `pairs` to a row, filled row by row
+# (reading order, left to right) — a name cell that takes the slack and a
+# value cell kept tight against it, with a gap before the next pair.
+static func _pair_table(cells: Array, pairs: int) -> String:
+	var s := "[table=%d]" % (pairs * 2)
+	for i in ceili(cells.size() / float(pairs)) * pairs:
+		if i < cells.size():
+			s += "[cell expand=3 padding=6,1,4,1]%s[/cell][cell padding=0,1,16,1]%s[/cell]" % cells[i]
+		else:
+			s += "[cell expand=3][/cell][cell][/cell]"
+	return s + "[/table]\n"
+
+# #188: a list of names, `cols` to a row, for what was a comma run.
+static func _list_table(items: Array, cols: int) -> String:
+	var s := "[table=%d]" % cols
+	for i in ceili(items.size() / float(cols)) * cols:
+		s += "[cell expand=1 padding=6,1,12,1]%s[/cell]" % (items[i] if i < items.size() else "")
+	return s + "[/table]\n"
 
 # A section caption on the sheet: small, gilt, the way Icons' "Caption" type reads.
 static func _cap(text: String) -> String:
