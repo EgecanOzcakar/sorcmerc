@@ -409,7 +409,7 @@ static func rescue_offer(s, world, _party) -> Dictionary:
 		# The lair raiding this town (core/raids.gd) is where the people it took
 		# are: it wins the posting outright, pens permitting.
 		var rank: float = 0.0 if l.id == s.raided_by else d
-		if l.looted or d > reach or rank >= best_d or not Site.pens_ahead(l):
+		if l.looted or d > reach or rank >= best_d or not Site.pens_ahead(l, world):
 			continue
 		best = l
 		best_d = rank

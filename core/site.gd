@@ -106,9 +106,62 @@ const REST_SHARE := 0.4       # of those, how many are a rest rather than a cach
 # the sixth floor, is where a delve is lost. And the day is hard: a level-3
 # company that takes every rest it is offered clears one lair in five in its
 # own country and wipes on the rest — the autopilot never withdraws, which a
-# player does, so read these as the floor of a careful player's rate. Nothing
-# moved; whether the Heartland's lairs should be this hard is the owner's call
-# (the build log, "The measured pass", Still open).
+# player does, so read these as the floor of a careful player's rate. These
+# rows were taken on a Heartland lair under the global pair, which every other
+# band still uses; the owner found the Heartland's lairs too hard, and
+# BAND_SUPPORT below gives it a pair of its own (the build log, "The road home").
+
+# THE HEARTLAND'S OWN PAIR — MEASURED 2026-09-25 (tests/sweep_site_knobs.gd,
+# POLICY=rest), the owner's call on the table above: a level-3 company should
+# clear a Heartland lair 35-45% of the time taking every rest, and a level-5
+# one stay under about 80%. A rest taken was the lever (about twenty-five
+# points a rest), so the Heartland offers support rooms more often and rests
+# among them more often; the cap of two short rests a long rest
+# (SettlementVisit.MAX_SHORT_RESTS) still bounds a delve at two.
+#
+#   preset trio, lair at the Heartland's anchor, 210 delves a row, taking every
+#   rest offered, master (2662712) and this back to back:
+#
+#                          cleared  wiped  rests  reach boss  hp/slots   boss
+#                                          /delve             at boss    won
+#   level 3  master         17.6%   82.4%  0.60     41.0%     61 / 55%   43.0%
+#            0.60 / 0.70    40.0%   60.0%  1.39     74.3%     72 / 71%   53.8%
+#   level 5  master         54.3%   45.7%  0.70     91.0%     69 / 66%   59.7%
+#            0.60 / 0.70    70.5%   29.5%  1.50     98.1%     83 / 78%   71.8%
+#
+#   cleared by depth, level 3: 3 rooms 58.9%, 4 rooms 37.5%, 5 rooms 42.9%,
+#   6 rooms 14.3% (master 28.6 / 14.3 / 16.1 / 9.5).
+#
+# Per band, not global: the table above is every band's number, and a global
+# move would have walked the Marches' and the Frontier's lairs out of theirs.
+# Keyed by core/regions.gd's band id; a band not listed takes the global pair,
+# so every lair outside the Heartland is laid out exactly as before, draw for
+# draw (tests/test_site.gd holds it), and every number measured on one still
+# stands. The boss room is not drawn from the rng (_boss_room), so
+# tests/sweep_faction_boss.gd, which fights only the boss, cannot move.
+# tests/sweep_site_kin.gd always takes the first way on (always a fight), so
+# the pair only reshuffles which combat rooms it draws: level 3, 14 seeds a
+# faction, 1.84 -> 1.81 rooms won a delve and 8.6 -> 9.0% cleared over the
+# fifteen, the peoples drawn identical. Noise.
+const BAND_SUPPORT := {
+	"heartland": {"support": 0.60, "rest_share": 0.70},
+}
+
+# [SUPPORT_CHANCE, REST_SHARE] for a lair in `band` ("" or unlisted: the global
+# pair).
+static func support_for(band: String) -> Array:
+	var b: Dictionary = BAND_SUPPORT.get(band, {})
+	return [float(b.get("support", SUPPORT_CHANCE)), float(b.get("rest_share", REST_SHARE))]
+
+# Which band a lair's interior is laid out for: the one it stands in. "" with
+# no world to ask (a test's bare lair), which is the global pair. A lair never
+# moves, and core/regions.gd's rings are anchored on the start town and
+# measured off the settlements and lairs placed, so it is the same band every
+# time the same warren is entered.
+static func band_for(lair, world) -> String:
+	if world == null:
+		return ""
+	return Regions.band_of(world, lair.position)
 
 # Room gold. A site pays better than world_lairs.gd's flat sneak-past stash
 # (LOOT_BASE 40) because you fought the whole way down for it.
@@ -215,7 +268,7 @@ static func for_lair(lair, party, world):
 	# Seeded off the lair's own id, so the same warren is the same warren every
 	# time it is entered — including after withdrawing and coming back.
 	s.rng = RNG.new(maxi(1, absi(hash("site|%s" % lair.id))))
-	s.rooms = _build(lair, s.rng)
+	s.rooms = _build(lair, s.rng, band_for(lair, world))
 	# The mouth, every time. A party that withdrew (or quit mid-delve, or kept
 	# a save from before this rule) finds the rooms it fought through filled in
 	# again: leaving undoes the descent (the design audit §3.3). What the party
@@ -292,8 +345,11 @@ static func depth_for(lair) -> int:
 # depth the party has not yet fought past. core/quest_posting.gd asks before
 # posting, so a job is only ever posted about captives that are actually
 # reachable. Same seed as for_lair(), so it is the same interior.
-static func pens_ahead(lair) -> bool:
-	var rooms: Array = _build(lair, RNG.new(maxi(1, absi(hash("site|%s" % lair.id)))))
+# `world` places the lair in its band, which lays its floors out (support_for);
+# a caller that will enter the lair through for_lair() passes the same world,
+# or the two can disagree about a Heartland lair.
+static func pens_ahead(lair, world = null) -> bool:
+	var rooms: Array = _build(lair, RNG.new(maxi(1, absi(hash("site|%s" % lair.id)))), band_for(lair, world))
 	for d in range(int(lair.depth_cleared), rooms.size()):
 		for r in rooms[d]:
 			if String(r.get("objective", "")) == "rescue":
@@ -314,8 +370,9 @@ static func theme_for_faction(faction: String) -> String:
 # The whole interior, laid out up front: one array of picks per depth, the last
 # depth always the boss alone (there is no choosing your way past the thing the
 # lair is built around).
-static func _build(lair, rng) -> Array:
+static func _build(lair, rng, band := "") -> Array:
 	var total := depth_for(lair)
+	var knobs := support_for(band)
 	var theme := theme_for_faction(lair.faction)
 	var out: Array = []
 	var used := {}
@@ -326,8 +383,8 @@ static func _build(lair, rng) -> Array:
 		# its entirety is a floor that never happened.
 		picks.append(_combat_room(rng, used, theme, d))
 		while picks.size() < want:
-			if _randf(rng) < SUPPORT_CHANCE:
-				picks.append(_support_room(rng, used, d))
+			if _randf(rng) < float(knobs[0]):
+				picks.append(_support_room(rng, used, d, float(knobs[1])))
 			else:
 				picks.append(_combat_room(rng, used, theme, d))
 		out.append(picks)
@@ -357,8 +414,8 @@ static func _combat_room(rng, used: Dictionary, theme: String, d: int) -> Dictio
 	return r
 
 
-static func _support_room(rng, used: Dictionary, d: int) -> Dictionary:
-	var rest: bool = _randf(rng) < REST_SHARE
+static func _support_room(rng, used: Dictionary, d: int, rest_share := REST_SHARE) -> Dictionary:
+	var rest: bool = _randf(rng) < rest_share
 	var r := _pick(REST_ROOMS if rest else TREASURE_ROOMS, rng, used)
 	r["kind"] = "rest" if rest else "treasure"
 	r["depth"] = d

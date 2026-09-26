@@ -68,7 +68,7 @@ func _init() -> void:
 	var held = null
 	for i in 400:
 		var l = World.Lair.new("pens-%d" % i, s.position + Vector2(260, 120), "goblinoid")
-		if Site.pens_ahead(l):
+		if Site.pens_ahead(l, w.world):
 			held = l
 			break
 	held.discovered = true

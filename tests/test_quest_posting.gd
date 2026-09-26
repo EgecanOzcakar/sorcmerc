@@ -270,7 +270,7 @@ func test_rescue_offer() -> void:
 	var held = null
 	for i in 400:
 		var l = World.Lair.new("pens-%d" % i, Vector2(120, 60), "goblinoid")
-		if Site.pens_ahead(l):
+		if Site.pens_ahead(l, w):
 			held = l
 			break
 	check(held != null, "a lair with pens exists")
@@ -313,12 +313,12 @@ func test_raid_premium_and_rescue() -> void:
 	var far = null
 	for i in 400:
 		var l = World.Lair.new("pens-%d" % i, Vector2(120, 60), "goblinoid")
-		if Site.pens_ahead(l):
+		if Site.pens_ahead(l, w):
 			near = l
 			break
 	for i in 400:
 		var l = World.Lair.new("raider-%d" % i, Vector2(500, 0), "goblinoid", "the Raider Hole")
-		if Site.pens_ahead(l):
+		if Site.pens_ahead(l, w):
 			far = l
 			break
 	check(near != null and far != null, "two lairs with pens")
