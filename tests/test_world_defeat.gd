@@ -20,6 +20,7 @@ const Defeat = preload("res://core/defeat.gd")
 const WorldSave = preload("res://core/world_save.gd")
 
 func _init() -> void:
+	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
 	var main = load("res://scenes/world/world.tscn").instantiate()
 	root.add_child(main)
 	for i in 10:

@@ -21,6 +21,7 @@ func check(cond: bool, label: String) -> void:
 	else: _fail += 1; printerr("  FAIL: ", label)
 
 func _init() -> void:
+	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
 	const World = preload("res://core/world.gd")
 	var p := World.RoamingParty.new("test", Vector2.ZERO, "human")
 	check(p.highest_troop().is_empty(), "no troops, no highest troop")

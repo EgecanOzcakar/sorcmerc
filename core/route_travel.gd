@@ -14,10 +14,11 @@
 #   RouteTravel.tick(world, now)            # the towns' bounties on the bands out on their roads
 #
 # WHAT A ROUTE WORLD IS, and why it is a property of the world rather than of
-# the flag. The flag only decides how a world is BORN: a map built while it is
-# set is adopted into routes. From then on world.routes is what says so, and
-# the save carries it — a route run resumed without the flag is still a route
-# run, and a free-roaming save loaded with the flag is still free-roaming,
+# the flag. Routes are the default (phase 2b); SORCMERC_ROUTES=0 opts a new map
+# out into the free plane. The flag only decides how a world is BORN: a map
+# built without the opt-out is adopted into routes. From then on world.routes
+# is what says so, and the save carries it — a route run resumed with the
+# opt-out is still a route run, and a free-roaming save is still free-roaming,
 # because adopting a world mid-run would strand every band, job and raid it
 # holds. docs/spike-route-travel.md §6 is the plan this is phase 1 of.
 #

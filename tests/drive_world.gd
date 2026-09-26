@@ -9,6 +9,7 @@ var screen
 var _fail := 0
 
 func _init() -> void:
+	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
 	# O17: this process's own autosave slots, so a concurrent godot run cannot
 	# clobber them. randi() as well as the pid: under a sandboxed (flatpak)
 	# godot every process sees pid 3, so the pid alone is not unique.

@@ -38,6 +38,7 @@ func _find_watch(main, want_ok: bool) -> float:
 	return -1.0
 
 func _init() -> void:
+	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
 	# --- a safe night: the long rest actually happens ---
 	var safe = load("res://scenes/world/world.tscn").instantiate()
 	root.add_child(safe)

@@ -266,11 +266,11 @@ title screen; without it, "New run" goes straight to the open world.
 `SORCMERC_UNLOCK_DLC=1` (like `SORCMERC_PLAYTEST=1`) owns every paid pack — see
 `docs/modding.md`. `SORCMERC_DEBUG=1` puts the developer's "Random battle
 (debug)" button back on the title screen; a player never sees it.
-`SORCMERC_ROUTES=1` builds a new map as a route world (#231 phases 1–2): the
-company travels only on the roads it knows, no band walks the map, and the
-road decides what it meets; a band something names — a town's bounty, a raid
-at a gate, a story's or a pack's — stands pinned on a road —
-`docs/spike-route-travel.md`.
+A new map is a route world by default (#231): the company travels only on the
+roads it knows, no band walks the map, and the road decides what it meets; a
+band something names — a town's bounty, a raid at a gate, a story's or a
+pack's — stands pinned on a road (`docs/spike-route-travel.md`).
+`SORCMERC_ROUTES=0` builds the old free plane instead, where bands walk the map.
 
 ## Pull requests
 

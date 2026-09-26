@@ -364,8 +364,10 @@ they get their sweep.
   born with the flag. A raid is the town state plus the pull, with its band
   pinned at the town's gate for its siege instead of walking there. The mod
   API's vocabulary is unchanged (`sorcmerc-compat`).
-- **Phase 2b — routes by default.** Flip the flag's default, with free roam
-  kept as an opt-out. When it is gone for good: `WorldBands`, `WorldAI`'s
+- **Phase 2b — routes by default. Landed 2026-09-26** (build log
+  `docs/plan/2026-09-26-routes-by-default.md`): a new map is a route world
+  unless `SORCMERC_ROUTES=0`, which keeps the free plane. When the free plane
+  is gone for good: `WorldBands`, `WorldAI`'s
   hunt, `WorldBattle`, `WorldFlee`, `WorldChase` and click-to-meet retire; a
   free-roaming save adopted into routes pins its named bands and drops the
   rest (`RouteTravel.adopt(world, true)` already does the pinning), and an
