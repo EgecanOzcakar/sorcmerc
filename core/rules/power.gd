@@ -116,6 +116,13 @@ static func estimate(c, opponents := 0) -> Dictionary:
 	# weapon action rather than stacking on it, and a leveled spell only contributes the
 	# margin over that action, amortized across ROUNDS.
 	#
+	# The party autopilot has played it that way only since 2026-09-25 (core/ai.gd
+	# _caster_bolt): before, a caster with no bow walked up and swung, so a
+	# caster-heavy party won under the fights this bought it. tests/sweep_metamagic.gd
+	# (the preset fighter and two built sorcerers, easy, 200 seeds) read 85.0 / 93.0 /
+	# 79.5% at levels 3 / 5 / 10 on master and 92.5 / 97.0 / 86.5% after — nearer the
+	# 95% target everywhere and over it nowhere past noise, so nothing here was re-priced.
+	#
 	# The spell list is a menu, not a stack: one action casts one spell and one
 	# slot pays for one cast. This used to credit EVERY leveled spell with its
 	# level's full slot count and add up every spell's control, so a caster's
@@ -202,7 +209,11 @@ static func estimate(c, opponents := 0) -> Dictionary:
 #                     88.0% at 10, fights a third shorter. Priced as a second
 #                     action on each turn the points and slots can pay for
 #                     (quickened_turns), it comes back to 83.5 / 95.0 / 83.0%:
-#                     inside noise at every level.
+#                     inside noise at every level. RE-MEASURED 2026-09-25 when
+#                     casters stopped walking into melee (core/ai.gd
+#                     _keep_range): without / with, priced, 92.5 / 93.5,
+#                     97.0 / 96.5, 86.5 / 88.0% — still inside noise, the
+#                     price stands.
 #   road potions      a Potion of Heroism on each of the preset trio, or Giant
 #                     Strength on its fighter, each +8.0 at hard, level 3
 #                     (+4.0 at level 8). The buff's to-hit, damage and AC go on

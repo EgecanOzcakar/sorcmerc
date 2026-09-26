@@ -633,6 +633,7 @@ func _process(delta: float) -> void:
 	_check_moments()
 	_check_callings()
 	_check_bench()
+	_check_raided_visit()
 	_check_forage()
 	_check_travel()
 	_check_routes(route_from)
@@ -2732,6 +2733,24 @@ func _check_callings() -> void:
 # way a calling's card does, which is also what keeps it out of a fight, a
 # site and a visit. A leaver goes back to the barracks file, where an inn may
 # offer them again one day as a veteran (core/recruits.gd).
+# A raid can land on the town the company is standing in: the days of a
+# downtime row, or a defeat's lost day, run the world clock (core/world_rest.gd)
+# with the visit still open. The shelf on screen was read before the raiders
+# came, so it is read again — halved, as a raided town's always is — the frame
+# the raid is there. Only the market's own keys: the log, the page and the
+# visit's stamp stay this visit's.
+func _check_raided_visit() -> void:
+	if _visit.is_empty():
+		return
+	var vs = _visit.get("settlement")
+	if vs == null or vs.raided_by == "" or bool(_visit.get("battle", false)):
+		return
+	var m: Dictionary = Visit.market(vs, float(_visit.get("gap", -1.0)), true, float(_visit.get("opinion", 0.0)))
+	for k in m:
+		_visit[k] = m[k]
+	if is_instance_valid(_visit_panel):
+		_build_visit_panel()
+
 func _check_bench() -> void:
 	Bench.sync(party, world.clock.elapsed)
 	if _combat != null or not _visit.is_empty() or _overlay_up() or DiceRoll.in_air():
