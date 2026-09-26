@@ -70,6 +70,7 @@ and a mod from a forum can go through one pipeline with one trust level.
   "world": "world.json",
   "story": "story.json",
   "callings": "callings.json",
+  "road_events": "road.json",
   "data": {"bestiary.json": "monsters.json", "magic-items.json": "items.json"}
 }
 ```
@@ -87,12 +88,13 @@ and a mod from a forum can go through one pipeline with one trust level.
 | `world` | a world file (§3) |
 | `story` | a story file (§4) |
 | `callings` | a callings file (§5.2) |
+| `road_events` | a road events file (§5.3) |
 | `data` | `{game data file: your file}` (§5) |
 
 Everything but `format`, `id` and `title` is optional.
 
-The API level is still **1**. The `data/effects/` files in §5.1 and the
-`callings` file in §5.2 are new, and no pack written before them mentioned
+The API level is still **1**. The `data/effects/` files in §5.1, the
+`callings` file in §5.2 and the `road_events` file in §5.3 are new, and no pack written before them mentioned
 them; a capability a pack can decline to use is not a break. `api` moves only when something a pack already
 wrote stops meaning what it meant.
 
@@ -647,6 +649,80 @@ load until they are fixed.
 
 Turning the pack off takes its callings back out with its records.
 
+### 5.3 `road_events` — what the road asks
+
+Every few hours of travel the road stops the company with an event and two or
+three things to do about it (`core/road_events.gd`; the built-in ones are
+`data/road_events.json`, which is the best set of examples there is). A pack
+adds its own with a `road_events` file: a list of events, added to the table.
+An event with the same `id` as a built-in one replaces it.
+
+```json
+[
+  {"id": "old-bridge", "title": "The bridge is out",
+   "text": "Half a bridge, and the river doing what rivers do.",
+   "bands": ["marches", "frontier"], "needs": "routes", "weight": 1,
+   "choices": [
+     {"id": "wade", "label": "Wade across", "check": {"skills": ["athletics"], "dc": 13, "role": "scout"},
+      "pass": {"text": "%s finds the shallows.", "minutes": 30},
+      "fail": {"text": "Soaked, and a pack gone.", "gold": [-30, -10], "hurt": 0.05}},
+     {"id": "ferryman", "label": "Pay the ferryman", "cost": {"gold": 15},
+      "then": {"text": "He knows another way, too.", "trail": {"known": true}}},
+     {"id": "camp", "label": "Wait for the ford to drop",
+      "then": {"text": "A day lost; a stranger at the fire.", "minutes": 360, "next": {"event": "stranger", "after": 0}}}
+   ]}
+]
+```
+
+An **event**: `id`, `title`, `text` (the situation), `choices` (two or
+three), and optionally `bands` (the countries it can happen in — `world.bands`
+above), `needs` (a state the world must be in), `weight` (how often it is
+picked; default 1) and `chain` (`true`: it only ever happens as a follow-up).
+
+`needs` is one of: `"hurt"` (somebody is carrying a wound), `"settlement"`
+(the map has a town), `"raided"` (a raided town's raiders are still hidden),
+`"routes"` (the map is a route world, with roads).
+
+A **choice**: `id`, `label`, and one of three shapes —
+- with `"check": {"skills": [...], "dc": N, "role": ...}` it is rolled, by the
+  character the standing orders put on that `role` (`"scout"` or `"watch"`;
+  leave it out for whoever is best), with the pace and the party's mood on
+  the roll, and has a `pass` and a `fail` outcome;
+- with `"spells": [...]` a caster who knows one of them does it without a
+  roll (`pass` and `fail` as above: `fail` is never reached but must exist
+  when there is no check either);
+- with neither, it has a single `then` outcome.
+
+Any choice may add `"cost": {"gold": N}`, paid when it is chosen; the card
+shows it and disables the choice when the purse is short. (Built-in events
+also offer `"orders": true` — "as the standing orders have it" — which
+resolves the original self-rolling road event of the same id. A pack's own
+events cannot use it.)
+
+An **outcome** is `text` (a `%s` in it is the roller's name) and any of these
+effects:
+
+| effect | does |
+|---|---|
+| `"text"` | what happened |
+| `"minutes"` | time lost (positive) or saved (negative) |
+| `"gold"` | coin found (positive) or lost (negative): a number, or `[low, high]`. A loss never takes more than the purse holds. |
+| `"hurt"` | a fraction of current HP off everyone standing; never drops anybody |
+| `"heal"` | a fraction of max HP back to everyone standing |
+| `"item"` | an item id into the pack, or `"salvage"` for a piece of ordinary gear |
+| `"xp"` | experience, split across the party |
+| `"opinion"` | a number (the nearest town's people), or `{"faction": id, "delta": n}` |
+| `"reveal"` | `"lair"` (the nearest hidden lair goes on the map) or `"raiders"` (the lair behind a raid) |
+| `"trail"` | `{"known": true}` — a new way on the map to a place the company could not reach before, shown at once; `false`: only noticed when the company passes where it starts. On a map without roads it reveals the nearest lair instead. |
+| `"fight"` | `{"faction": id}` or `{"faction": "road"}` (whoever the road here would send) — a band put in front of the company, met on the approach card |
+| `"next"` | `{"event": id, "after": minutes}` — a follow-up: that event happens at the first road check after `after` minutes, ahead of anything else. This is how events chain. The id may be one of yours or a built-in one. |
+
+Checked at scan time: an unknown effect, a follow-up to an event that does not
+exist, an item that does not exist, fewer than two or more than three choices,
+a choice without its outcome — each is a line in the browser, and the pack does
+not load until it is fixed. Turning the pack off takes its events back out of
+the road's table.
+
 ---
 
 ## 6. Free and paid packs
@@ -753,6 +829,7 @@ without rewriting the chapter around it.
 | `core/mod/story.gd` | `story.json`: the schema, and the validator |
 | `core/mod/story_runtime.gd` | the playthrough: conditions, effects, chapters, save state |
 | `core/callings.gd` | `callings.json`: the built-in sixteen, the validator, where a pack's land |
+| `core/road_events.gd` | road events: the built-in table (`data/road_events.json`), the validator, choosing and chaining |
 | `core/rules/catalog.gd` | where data overlays land |
 | `core/rules/effects.gd` | the `data/effects/*.json` vocabulary, and what reads it |
 | `core/potions.gd` | `effects/potions.json`: the two doors a bottle opens |

@@ -319,6 +319,13 @@ static func check(party, world, rng = null) -> Dictionary:
 	if table.is_empty():
 		return {}                      # nothing this country and this party could plausibly meet
 	var e: Dictionary = table[rng.roll_die(table.size()) - 1]
+	return resolve(e, party, world, rng)
+
+# One of EVENTS, resolved the D3 way: by whoever the standing orders put on it.
+# check() is this after its pick; #232's choosing road (core/road_events.gd)
+# offers it as the choice "as the orders have it", which is how standing orders
+# still decide things now that the road asks.
+static func resolve(e: Dictionary, party, world, rng) -> Dictionary:
 	var out: Dictionary = {"id": e["id"], "title": e["title"], "kind": e["kind"]}
 
 	# The one event with no check: good ground is good ground.
@@ -338,9 +345,31 @@ static func check(party, world, rng = null) -> Dictionary:
 		_apply(e, true, party, world, rng, out)
 		_note_event(String(e["id"]))
 		return out
-	var who := _assign(party, e, orders(party))
-	if who.is_empty():
+	var r := roll(party, e, rng)
+	if r.is_empty():
 		return {}                      # nobody left to roll: no event rather than a fake one
+	var ok: bool = r["ok"]
+	out.merge(r, true)
+	out["text"] = (String(e["pass"]) % r["cname"]) if ok else String(e["fail"])
+	_apply(e, ok, party, world, rng, out)
+	# The roll feeds back: the roller who read the road right (or wrong) is
+	# felt for it by everyone else marching. Only here — nobody rolled on the
+	# spell-pass or no-check exits above.
+	PartyOpinion.road_result(party, String(r["char_id"]), ok, String(e["kind"]))
+	_note_event(String(e["id"]))
+	return out
+
+# The road's one skill check, as every road event makes it: `spec` names the
+# job ("role": scout, watch or "" for anyone), the skills that can do it and
+# the DC. The standing order for the role rolls when one is set, else the
+# party's best; the pace, the party's morale and the roller's own traits are
+# on the roll. {} when nobody can make it. Shared by resolve() and by the
+# choices core/road_events.gd offers, so an order set on the party screen is a
+# bonus on whichever choice the player makes.
+static func roll(party, spec: Dictionary, rng) -> Dictionary:
+	var who := _assign(party, spec, orders(party))
+	if who.is_empty():
+		return {}
 	# spike-party-opinions §7: a party that pulls together reads the road a
 	# point better; one at odds, a point worse. Same term as pace_bonus, so
 	# the card's roll line just grows another signed number.
@@ -350,22 +379,21 @@ static func check(party, world, rng = null) -> Dictionary:
 	var tt: Dictionary = Traits.road_term(party.get_member(String(who["id"])), "travel", party.here)
 	var bonus: int = int(who["bonus"]) + pace_bonus(party) + morale + int(tt["n"])
 	var nat: int = int(Dice.d20(rng)["nat"])
-	var ok: bool = nat + bonus >= int(e["dc"])
-	out.merge({"ok": ok, "char_id": who["id"], "cname": who["cname"], "skill": who["skill"],
-		"nat": nat, "bonus": bonus, "dc": int(e["dc"]),
-		"named": bool(who["named"])}, true)
+	var out := {"ok": nat + bonus >= int(spec["dc"]), "char_id": who["id"], "cname": who["cname"],
+		"skill": who["skill"], "nat": nat, "bonus": bonus, "dc": int(spec["dc"]),
+		"named": bool(who["named"])}
 	if morale != 0:
 		out["morale"] = morale
 	if int(tt["n"]) != 0:
 		out["trait_term"] = {"n": int(tt["n"]), "who": tt["who"]}
-	out["text"] = (String(e["pass"]) % who["cname"]) if ok else String(e["fail"])
-	_apply(e, ok, party, world, rng, out)
-	# The roll feeds back: the roller who read the road right (or wrong) is
-	# felt for it by everyone else marching. Only here — nobody rolled on the
-	# spell-pass or no-check exits above.
-	PartyOpinion.road_result(party, String(who["id"]), ok, String(e["kind"]))
-	_note_event(String(e["id"]))
 	return out
+
+# One of EVENTS by id, or {}.
+static func event(id: String) -> Dictionary:
+	for e in EVENTS:
+		if String(e["id"]) == id:
+			return e
+	return {}
 
 
 # T19: one tally of road events weathered, and a set of the ones this machine

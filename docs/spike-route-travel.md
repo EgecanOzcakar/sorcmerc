@@ -372,7 +372,7 @@ they get their sweep.
   free-roaming save adopted into routes pins its named bands and drops the
   rest (`RouteTravel.adopt(world, true)` already does the pinning), and an
   optional `routes` block in `world.json` lets a pack draw its own roads.
-- **Phase 3 — #232 and #234.** A met band's card grows past fight / parley /
+- **Phase 3 — #232 and #234. 3a landed 2026-09-26** (the road asks, in data, with chains and trails: `docs/plan/2026-09-26-the-road-asks.md`; 3b, the meeting card's new ways, next). A met band's card grows past fight / parley /
   slip / ambush into what a road meeting can be (trade, news, tribute, an
   escort job); D3's road events stop resolving themselves and ask, two or
   three choices each — the `options` key `core/travel.gd`'s own `ponytail:`

@@ -112,6 +112,8 @@ const RNG = preload("res://core/rng.gd")
 const CharacterSave = preload("res://core/character_save.gd")
 const WorldSave = preload("res://core/world_save.gd")
 const RouteTravel = preload("res://core/route_travel.gd")   # #231: the roads, when this is a route world
+const RoadEvents = preload("res://core/road_events.gd")     # #232: the road asks
+const RoadChoiceCard = preload("res://scenes/world/road_choice_card.gd")
 const Grudges = preload("res://core/grudges.gd")
 
 const COMBAT_SCENE := "res://scenes/main.tscn"
@@ -3283,10 +3285,16 @@ func _close_approach() -> void:
 # whole bargain: nothing is asked of the player while nothing is happening, and
 # nothing is missed when something is.
 #
-# The event arrives already resolved — standing orders set on the party screen
-# decided who rolled and at what bonus (core/travel.gd), hours before this
-# fired. The card reports; it does not ask. Same gates as every other _check_*:
-# not mid-fight, not in a settlement, not underground, not already paused.
+# #232: the road asks. Every Travel.EVENT_INTERVAL of actual travel the road
+# puts an event to the company (core/road_events.gd: a follow-up a choice put
+# ahead, first, else one this country could hold), and the clock STOPS on a
+# card with two or three things to do about it. The answer is resolved and
+# reported on D3's own card, die and all; a "fight" in the answer puts a band in
+# front of the company on the approach card, like the road's own meetings.
+# Standing orders still decide: "as the orders have it" is one of the choices,
+# and every roll is made by whoever the orders put on that job. Same gates as
+# every other _check_*: not mid-fight, not in a settlement, not underground,
+# not already paused.
 func _check_travel() -> void:
 	if _combat != null or not _visit.is_empty() or _site != null or world.clock.is_paused():
 		return
@@ -3295,17 +3303,50 @@ func _check_travel() -> void:
 	if world.clock.elapsed - _last_travel_at < Travel.EVENT_INTERVAL:
 		return
 	_last_travel_at = world.clock.elapsed
-	var e: Dictionary = Travel.check(party, world,
+	var e: Dictionary = RoadEvents.pick(party, world,
 		RNG.new(maxi(1, absi(hash("road|%d" % int(world.clock.elapsed))))))
 	if e.is_empty():
 		return
 	world.clock.pause()
 	_pause_btn.text = "Resume"
+	var card = RoadChoiceCard.new()
+	_event_card = card
+	add_child(card)
+	card.chosen.connect(_on_road_choice.bind(e))
+	card.acknowledged.connect(_on_road_choice.bind("", e))
+	card.show_event(e, RoadEvents.options(e, party, world))
+
+# The answer: resolved (core/road_events.gd), then reported on D3's card. ""
+# is the card waved away — the first choice it offered that can be taken.
+func _on_road_choice(choice_id: String, e: Dictionary) -> void:
+	if _event_card != null:
+		_event_card.queue_free()
+		_event_card = null
+	if choice_id == "":
+		for o in RoadEvents.options(e, party, world):
+			if not bool(o["disabled"]):
+				choice_id = String(o["id"])
+				break
+	var out: Dictionary = RoadEvents.choose(e, choice_id, party, world,
+		RNG.new(maxi(1, absi(hash("roadchoice|%d|%s" % [int(world.clock.elapsed), choice_id])))))
+	if out.is_empty():
+		_on_event_ack()
+		return
+	if out.has("lair") or out.has("trail"):
+		_lairs3d.reset(world)
 	_event_card = EventCard.new()
 	add_child(_event_card)
-	_event_card.acknowledged.connect(_on_event_ack)
-	_event_card.show_event(e)
-	_autosave()   # an event can move gold, HP, the clock and the map
+	_event_card.acknowledged.connect(_on_road_outcome.bind(out))
+	_event_card.show_event(out)
+	_autosave()   # an answer can move gold, HP, the clock and the map
+
+# After the answer's card: a band the answer put on the road is met.
+func _on_road_outcome(out: Dictionary) -> void:
+	_on_event_ack()
+	if out.has("fight"):
+		var band = RouteTravel.band_for(world, out["fight"])
+		_party3d.reset(world)
+		_meet(band, true)
 
 # The plain handler for a road event's card. Note it FREES the card without
 # emitting `acknowledged`, so anything that needs a bound follow-up to run
