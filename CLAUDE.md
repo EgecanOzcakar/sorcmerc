@@ -35,7 +35,7 @@ godot --path . -s tests/shot_world.gd               # overworld     -> world_scr
 godot --headless --path . -s tests/shot_screens.gd  # every menu    -> shots_tmp/ (SHOT_ONLY=party for one)
 ```
 
-Env vars: `SORCMERC_SEED` replays an exact fight/route, `SORCMERC_FAST` zeroes UI tweens and skips cosmetic systems, `SORCMERC_MODS_DIR` relocates community packs, `SORCMERC_UNLOCK_DLC=1` owns every paid pack, `SORCMERC_LINEAR_CAMPAIGN=1` restores the old node-route campaign, `SORCMERC_ROUTES=1` builds a new map as a route world (roads only, no bands on the map — #231 phase 1, `core/route_travel.gd`), `SORCMERC_DEBUG=1` shows the title screen's "Random battle (debug)" button.
+Env vars: `SORCMERC_SEED` replays an exact fight/route, `SORCMERC_FAST` zeroes UI tweens and skips cosmetic systems, `SORCMERC_MODS_DIR` relocates community packs, `SORCMERC_UNLOCK_DLC=1` owns every paid pack, `SORCMERC_LINEAR_CAMPAIGN=1` restores the old node-route campaign, `SORCMERC_ROUTES=1` builds a new map as a route world (roads only, no bands on the map; named bands pinned to roads — #231 phases 1–2, `core/route_travel.gd`, `core/route_pins.gd`), `SORCMERC_DEBUG=1` shows the title screen's "Random battle (debug)" button.
 
 One-time: `git config core.hooksPath .githooks` so changed assets are re-imported after a pull or branch switch.
 

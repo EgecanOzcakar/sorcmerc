@@ -11,7 +11,7 @@ Swap button was one generic ⇄ whatever it would swap to.
   Attack wears `who.attacks[0]`'s item render (`assets/art/items`, which covers
   all 38 SRD weapons), the same way a Drink button already wore its bottle.
 - The off-hand swing wears its own weapon: `Adapter._offhand_verb` now names it
-  in a display-only `weapon` key.
+  in a display-only `weapon_id` key (`weapon`, the name, is what #245's log prints).
 - A thrown javelin or dagger is still the javelin (`Icons.weapon_icon` strips
   `-thrown`).
 - An Unarmed Strike or a pack's undrawn weapon keeps the generic badge. So does

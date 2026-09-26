@@ -31,6 +31,7 @@ const BugReport = preload("res://core/bug_report.gd")
 const Sound = preload("res://core/audio.gd")
 const Tutorial = preload("res://core/tutorial.gd")
 const Registry = preload("res://core/mod/registry.gd")
+const RouteTravel = preload("res://core/route_travel.gd")   # #231: a pack map born a route world
 const StoryRuntime = preload("res://core/mod/story_runtime.gd")
 const Coop = preload("res://core/coop.gd")
 const Recruits = preload("res://core/recruits.gd")   # a new run's founding: one hero made, the rest hired
@@ -673,6 +674,11 @@ func _start_pack(party) -> void:
 	WorldSave.new_slot()   # a pack run is a new run: its own slot, same as the rest
 	_enlist(party)
 	var world = Registry.world_of(_pack, int(OS.get_environment("SORCMERC_SEED")))
+	# #231 phase 2: a pack's map built while SORCMERC_ROUTES=1 is set is born a
+	# route world like a built-in one, its authored parties[] pinned to the
+	# roads rather than dropped (core/route_travel.gd).
+	if world != null and RouteTravel.flag_on():
+		RouteTravel.adopt(world, true)
 	var story_def = Registry.story_of(_pack)
 	var run = StoryRuntime.new(story_def, {}, _pack.id()) if story_def != null else null
 	_pack = null

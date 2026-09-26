@@ -59,6 +59,7 @@ const Rumors = preload("res://core/rumors.gd")
 const Site = preload("res://core/site.gd")
 const SiteScreen = preload("res://scenes/world/site_screen.gd")
 const WorldThreat = preload("res://core/world_threat.gd")
+const WorldRoadHome = preload("res://core/world_road_home.gd")
 const Regions = preload("res://core/regions.gd")
 const EnemyCasters = preload("res://core/enemy_casters.gd")
 const Travel = preload("res://core/travel.gd")
@@ -130,6 +131,9 @@ const ENCOUNTER_RADIUS := 24.0
 # It can only ever scale DOWN, and a weaker roster pays proportionally less XP
 # (encounter.gd's xp = power * XP_PER_POWER), so nothing is gained by staying
 # hurt. The old flat "normal" is what world_threat.gd's BASELINE replaces.
+# Since 2026-09-25 the walk out of a site has a gentler floor of its own until
+# dawn or a long rest (core/world_road_home.gd), which is why both assess()
+# calls below pass the world.
 # O6 visit distance. Deliberately wider than ENCOUNTER_RADIUS: a settlement is a
 # fixed landmark drawn at ~26 world units of radius (a city footprint) rather than
 # a 6-unit token, so "close enough to walk in through the gate" is its own number.
@@ -239,6 +243,11 @@ const LAIR_RADIUS := 14.0
 const LANDMARK_RADIUS := 10.0
 const PLAYER_RADIUS := 11.0
 const BAND_RADIUS := 9.0
+# #229: the ring round two bands locked in a clash. They met no further apart
+# than ENCOUNTER_RADIUS (a fast clock can stretch _trigger() past it, but not by
+# more than the bands' own footprints), and the ring sits on the midpoint, so
+# half of that plus one band's footprint takes both of them in.
+const CLASH_RADIUS := ENCOUNTER_RADIUS * 0.5 + BAND_RADIUS
 # How far the ring stands off the model inside it. Just past the square root of
 # two, and that is the whole of the reason for the number: footprint_of()
 # measures the model's half-span on its widest axis, and a settlement diorama's
@@ -425,8 +434,8 @@ func _ready() -> void:
 			_: world = _small_world()
 		# #231 phase 1: a map built while SORCMERC_ROUTES=1 is set is born a
 		# route world — roads only, nobody on the map but the company. Only a map
-		# built here: a resumed save or a pack's world is what it already was
-		# (core/route_travel.gd says why).
+		# built here: a resumed save is what it already was (core/route_travel.gd
+		# says why), and a pack's world is adopted where game.gd builds it.
 		if RouteTravel.flag_on():
 			RouteTravel.adopt(world)
 	RouteTravel.clear_met(world)   # #231: a road meeting the game was closed on ended with it
@@ -605,8 +614,10 @@ func _process(delta: float) -> void:
 		_gauged_at = world.clock.elapsed
 	WorldAI.update(world, delta)
 	_check_encounter(dt)
-	# O5: NPC-vs-NPC meetings resolve instantly, no scene, no pause — but not
-	# while the player's own fight has the map frozen.
+	# O5: NPC-vs-NPC meetings, no scene, no pause — but not while the player's
+	# own fight has the map frozen. #229: a meeting now locks the two bands in
+	# a clash for the fight's rounds on the clock, and what comes back here is
+	# the fights that have just ENDED, not the ones that just began.
 	if _combat == null and not world.clock.is_paused():
 		# O6 feeds off the outcome: a settlement near the corpses reads differently
 		# on the next visit. O5's resolution itself is untouched.
@@ -1563,12 +1574,29 @@ func _check_encounter(dt := 0.0) -> void:
 			continue   # met by clicking it, never by standing next to it
 		if WorldAI.in_truce(q, world.clock.elapsed):
 			continue   # met and parted without blood: they want nothing from you for a while
+		# #229: locked in a fight with another band — it has its hands full, and
+		# the party may stand and watch or walk on by. When the fight ends the
+		# winner is an ordinary band again, and this loop meets it as one.
+		if not world.clash_of(q).is_empty():
+			continue
 		if near:
 			_meet(q, hostile)
 			return
 
 # The card, or — for a hostile band in the dark — whatever the watch makes of it.
 func _meet(q, hostile: bool) -> void:
+	# #229: a band locked in a fight with another (core/world_battle.gd) is met
+	# by nobody until it is over. Its figure cannot be clicked (_band_at), but a
+	# band the party was already following or chasing can fall into a clash
+	# before the party reaches it — then the march stops at the edge of the
+	# fight. The winner can be met like any band afterwards.
+	var clash: Dictionary = world.clash_of(q)
+	if not clash.is_empty():
+		var other = WorldBattle.other_side(world, clash, q)
+		_camp_msg.text = "%s are locked in a fight%s — nobody will stop to talk until it's over." % [
+			EnemyNames.upper_first(EnemyNames.band_name(q, world)),
+			"" if other == null else " with " + EnemyNames.band_name(other, world)]
+		return
 	if hostile and world.clock.is_night() and not _night_jump(q):
 		return
 	_open_approach(q, hostile)
@@ -1593,6 +1621,11 @@ func _band_at(sp: Vector2):
 	var h: float = Party3D.TARGET_HEIGHT * ISO_GAIN * _zoom
 	for q in world.parties:
 		if q == p or q.is_player or not world.band_seen(q.position):
+			continue
+		# #229: a band locked in a clash is not a thing to meet, so its figure is
+		# not a thing to click — a click on it is a click on the ground there,
+		# and the party marches up to watch.
+		if not world.clashes.is_empty() and not world.clash_of(q).is_empty():
 			continue
 		var at := _pix(q.position)
 		if _in_model_box(sp, at, h):
@@ -1765,7 +1798,7 @@ func encounter_spec(foe, difficulty := "") -> Dictionary:
 	var seed_v: int = absi(hash(foe.id))
 	if theme == "":
 		seed_v = Scaler.pin_faction(seed_v, faction)
-	var threat: Dictionary = WorldThreat.assess(party)
+	var threat: Dictionary = WorldThreat.assess(party, world)   # world: the road home's clock
 	# D6: the two knobs compose, and they answer different questions. The band
 	# says how dangerous this country is (1.0 while the party is inside its level
 	# range, which is the common case); the party's condition still thins whatever
@@ -1814,6 +1847,8 @@ func encounter_spec(foe, difficulty := "") -> Dictionary:
 # room (core/site.gd) can run a fight with its own pre-built spec without also
 # inheriting the roaming-band aftermath below — erasing a party that was never
 # on the map, crediting faction opinion for a room in a cave.
+# #229: NOT the rate a band-vs-band clash is told at — that is
+# WorldBattle.MINUTES_PER_ROUND, and its comment says why the two differ.
 const MINUTES_PER_ROUND := 60.0
 
 func _run_combat(spec: Dictionary, difficulty: String,
@@ -1904,7 +1939,7 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 	if party.scouted_next:   # Potion of Clairvoyance, spent on this fight
 		scouted_ahead = true
 		party.scouted_next = false
-	var threat: Dictionary = WorldThreat.assess(party)
+	var threat: Dictionary = WorldThreat.assess(party, world)   # world: the road home's clock
 	var named: bool = difficulty != ""
 	var objective: Dictionary = {} if named else _road_objective(foe, jumped)
 	var kind := String(objective.get("kind", ""))
@@ -2606,8 +2641,11 @@ func _check_expired_lairs() -> void:
 		_lair_msg.text = WorldLairs.respawn_text(l)
 		_autosave()
 	# #231: a route world keeps no bands on the map, so none come back and none
-	# are refilled; the road decides who is out there.
+	# are refilled; the road decides who is out there — and the towns price the
+	# bands that stand on their roads (phase 2, core/route_pins.gd), which the
+	# boards post as bounties.
 	if RouteTravel.on(world):
+		RouteTravel.tick(world, world.clock.elapsed)
 		return
 	# #142: and the bands the party put down, two days on, out of those lairs.
 	var back: Array = WorldAI.respawn(world, world.clock.elapsed)
@@ -2626,9 +2664,9 @@ func _check_expired_lairs() -> void:
 # the respawn are; a landing can add a lair to the map, so the dioramas are
 # rebuilt whenever the poll had anything to say.
 func _check_raids() -> void:
-	# #231 phase 1: a raid is a band walking to a town, and a route world has
-	# none. Phase 2 makes a raid a town state (docs/spike-route-travel.md §6).
-	if _combat != null or _site != null or RouteTravel.on(world):
+	# #231 phase 2: on a route world the same clock runs, and the band stands
+	# pinned at the town's gate instead of walking to it (core/raids.gd).
+	if _combat != null or _site != null:
 		return
 	var lines: Array = Raids.tick(world, world.clock.elapsed)
 	if lines.is_empty():
@@ -3089,6 +3127,12 @@ func _on_site_done() -> void:
 		# core/site.gd: walking out undoes the descent; the next entry is the mouth.
 		_lair_msg.text = "%s is still down there. %d of %d rooms were behind you, and they will fill in again before you are back." % [
 			l.sname, int(l.depth_cleared), Site.depth_for(l)]
+	# The road home (core/world_road_home.gd): out of a site on their feet, the
+	# company has until dawn or a night's sleep on the gentler walk-home curve.
+	# A wipe does not start it — the defeat's landing has already carried them in.
+	if ending in ["cleared", "withdrawn"]:
+		WorldRoadHome.set_out(world)
+		_lair_msg.text += "  " + WorldRoadHome.EXIT_LINE
 	_site = null
 	if _site_screen != null:
 		_site_screen.queue_free()
@@ -3266,10 +3310,12 @@ func _check_routes(from: Vector2) -> void:
 					else "A way leaves the road here."
 				Sound.play_sfx("landmark_found")
 			"threat", "meet":
-				var band = RouteTravel.band_for(world, ev["spec"])
+				# What the road sent, or a band pinned on it (phase 2) that the
+				# company just walked up to — already on the map for its meeting.
+				var band = ev["band"] if ev.has("band") else RouteTravel.band_for(world, ev["spec"])
 				_party3d.reset(world)   # a figure is only built on reset (party3d.gd)
 				if ev["kind"] == "threat":
-					_meet(band, bool(ev["spec"]["hostile"]))
+					_meet(band, bool(ev["hostile"]))
 				else:
 					_open_approach(band, false)
 				return
@@ -3332,6 +3378,11 @@ func _check_region() -> void:
 			_region_lbl.text += " · %s" % BIOME_LABEL.get(ground, ground)
 		if Ladder.title_index() > 0:
 			_region_lbl.text += " · %s" % Ladder.title()
+		# The road home's clock, while it runs: said here because it is about
+		# where the company is walking, and gone the moment dawn or a bed ends it.
+		var home_note: String = WorldRoadHome.hud_note(world, party)
+		if home_note != "":
+			_region_lbl.text += " · %s" % home_note
 	if _region.is_empty():
 		_region = band          # first frame: the party is simply somewhere
 		return
@@ -5744,7 +5795,17 @@ func _gui_input(e: InputEvent) -> void:
 		elif e.button_index == MOUSE_BUTTON_LEFT and not spectator:   # the guest looks; the host orders
 			var p := world.player()
 			var band = _band_at(e.position)
-			if band != null:
+			# A band already met and parted with (slipped past, or under a
+			# truce) standing on a town does not eat the click on the town:
+			# the place wins, and the march goes there. A fresh band on the
+			# same spot is still the road doing its job — the click meets it.
+			var place = _place_at(e.position) if band != null and _parted_with(band) else null
+			if place != null and p != null and not RouteTravel.on(world):
+				_drop_meet()
+				world.set_goal(p, place.position)
+			elif place != null and p != null:
+				_route_click(e.position)
+			elif band != null:
 				_seek(band)
 			elif p != null and RouteTravel.on(world):
 				_route_click(e.position)
@@ -5752,6 +5813,27 @@ func _gui_input(e: InputEvent) -> void:
 				_drop_meet()
 				world.set_goal(p, _click_target(e.position))
 		queue_redraw()
+
+# A band the company has met and parted with: slipped past, or under a truce.
+func _parted_with(band) -> bool:
+	return _slipped.has(band.id) or WorldAI.in_truce(band, world.clock.elapsed)
+
+# The known place under screen point `sp` — a town, a found lair, a found
+# landmark — within ROUTE_PICK screen pixels, or null.
+func _place_at(sp: Vector2):
+	var at := _click_target(sp)
+	var reach: float = ROUTE_PICK / maxf(0.01, ISO_GAIN * _zoom)
+	var best = null
+	var best_d := reach
+	var places: Array = world.settlements.duplicate()
+	places.append_array(world.lairs.filter(func(l): return l.discovered))
+	places.append_array(world.landmarks.filter(func(m): return m.found))
+	for x in places:
+		var d: float = at.distance_to(x.position)
+		if d <= best_d:
+			best = x
+			best_d = d
+	return best
 
 # #231: on the roads a click is a place, never ground — the company goes there by
 # the known roads, or not at all (the owner's call: it never leaves the road).
@@ -6008,10 +6090,27 @@ func ground_marks() -> Array:
 		# everyone else's off their troops[] flavour roster.
 		var count: int = party.active.size() if q.is_player else q.troops.size()
 		var who: String = "You" if q.is_player else EnemyNames.upper_first(EnemyNames.band_name(q, world))
+		# #229: a band in a clash says so, and how far in it is — the fight is
+		# being told an hour a round, and the label is where the hours show.
+		var fighting: Dictionary = {} if q.is_player else world.clash_of(q)
+		var tag: String = "" if fighting.is_empty() else " · fighting, round %d/%d" % [
+			WorldBattle.round_of(fighting, world.clock.elapsed), int(fighting["rounds"])]
 		out.append({"pos": q.position, "radius": rad,
 			"color": _remembered(faction_color(q.faction, q.is_player), live),
 			"ring": 0.0, "fill": 0.0, "shadow": 1.0,
-			"label": "%s (%d)" % [who, count], "live": live})
+			"label": "%s (%d)%s" % [who, count, tag], "live": live})
+	# #229: the ground the two bands are fighting over, ringed in the foe's
+	# red and throbbing, so a battle reads from across the map before the
+	# labels do. Fog-gated like the bands themselves.
+	for c in world.clashes:
+		var at: Vector2 = c["at"]
+		if not world.band_seen(at):
+			continue
+		var live: bool = world.is_visible_now(at, ppos)
+		var throb: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
+		out.append({"pos": at, "radius": CLASH_RADIUS,
+			"color": _remembered(Color(Icons.COL_FOE, 0.55 + 0.4 * throb), live),
+			"ring": 0.10 + 0.06 * throb, "fill": 0.12, "shadow": 0.0, "live": live})
 	return out
 
 

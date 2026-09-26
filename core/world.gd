@@ -255,6 +255,10 @@ var landmarks: Array[Landmark] = []
 var fallen: Array[Dictionary] = []
 # #163: when WorldBands.refill last put a band on the map (world-minutes).
 var bands_refilled_at := 0.0
+# The road home (core/world_road_home.gd): the world-minute the company last
+# came up out of a site it cleared or withdrew from, -1 for never. Only that
+# file reads it; world_save.gd round-trips it.
+var walk_home_from := -1.0
 # #231: the road network (core/world_routes.gd), or null. Non-null is what makes
 # this a route world: the company travels only on known roads and meets what
 # the road sends (core/route_travel.gd), with no bands on the map. Untyped,
@@ -266,6 +270,23 @@ var routes = null
 # rolls are counted off (one per RouteEncounters.STEP), saved so a reload
 # neither skips a roll nor makes one twice.
 var route_walked := 0.0
+# #229: band-vs-band battles still being fought. core/world_battle.gd is the
+# only writer — it opens one when two hostile bands meet and closes it when the
+# fight's rounds have run out on the clock; this file only reads the list, to
+# hold the two bands where they stand in tick(). One per battle:
+#   {"a", "b": the two party ids, "winner": one of them, "outcome": the
+#    Combat's own word for it, "rounds": int, "at": Vector2 (between the two,
+#    where the map draws it), "from", "until": world-minutes}
+var clashes: Array[Dictionary] = []
+# #231 phase 2: the bands that stand on a road rather than walk the map — a
+# town's bounty, a raid at a gate, a band a story or a pack put down by name
+# (core/route_pins.gd). Held apart from `parties` on purpose: nothing steers
+# them, no band fights them, the map does not draw them, and the road meets one
+# when the company walks past where it stands. Empty on a free-roaming map.
+var pinned: Array[RoamingParty] = []
+# When each town next posts a bounty on a pinned band, by settlement id; -1
+# while its band is out. core/route_pins.gd owns it.
+var bounty_due := {}
 # O15 — the only terrain the map has: hand-placed blobs of water, `{position, radius}`
 # each. A circle is the whole vocabulary; a lake is one, a river is a chain of
 # overlapping ones (see scenes/world/world.gd's _demo_world). Plain dictionaries
@@ -560,11 +581,35 @@ func water_depth(p: Vector2) -> float:
 func is_water(pos: Vector2) -> bool:
 	return water_depth(pos) < 0.0
 
+# A band by id, whether it walks the map or stands pinned on a road — what a
+# job, a calling or a raid that names a band looks it up by. null when gone.
+func band(id: String) -> RoamingParty:
+	for p in parties:
+		if p.id == id:
+			return p
+	for p in pinned:
+		if p.id == id:
+			return p
+	return null
+
+# Every band there is: the ones on the map, then the pinned ones.
+func bands() -> Array[RoamingParty]:
+	var out: Array[RoamingParty] = parties.duplicate()
+	out.append_array(pinned)
+	return out
+
 func player() -> RoamingParty:
 	for p in parties:
 		if p.is_player:
 			return p
 	return null
+
+# #229: the battle `p` is locked in, or {} when it is free to walk.
+func clash_of(p) -> Dictionary:
+	for c in clashes:
+		if c["a"] == p.id or c["b"] == p.id:
+			return c
+	return {}
 
 # A goal inside water is snapped back to the bank — the last dry point on the
 # straight line from the party toward it, which is where the party would have
@@ -612,7 +657,9 @@ func tick(delta: float) -> float:
 	if dt <= 0.0:
 		return 0.0
 	for p in parties:
-		move_toward_goal(p, dt)
+		# #229: a band in a fight stands its ground until the fight is over.
+		if clashes.is_empty() or clash_of(p).is_empty():
+			move_toward_goal(p, dt)
 	if camp_spot.is_finite() and not at_camp():
 		camp_spot = Vector2.INF   # the company has walked on: the camp is struck
 	return dt

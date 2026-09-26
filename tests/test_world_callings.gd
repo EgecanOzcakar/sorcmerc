@@ -66,11 +66,15 @@ func _camp(main) -> void:
 # Neither is what this test is about: the clock is nudged to a minute whose
 # camp seed rolls a quiet night (the camp integration test's own search), and
 # a band standing on the camp is sent off the map.
-func _quiet_night(main) -> void:
+func _clear_road(main) -> void:
 	var here: Vector2 = main.world.player().position
 	for q in main.world.parties.duplicate():
 		if not q.is_player and q.position.distance_to(here) < 300.0:
 			main.world.parties.erase(q)
+
+func _quiet_night(main) -> void:
+	var here: Vector2 = main.world.player().position
+	_clear_road(main)
 	while WorldCamp.ambush_roll(RNG.new(WorldCamp.camp_seed(main.world.clock.elapsed, here))):
 		main.world.clock.elapsed += 1.0
 
@@ -206,6 +210,13 @@ func _init() -> void:
 	main._event_card.acknowledged.emit()
 	await process_frame
 	check(main._event_card == null and not main._visit.is_empty(), "the telling acked: the visit is still up, no second card over it")
+	# The inn's night walks the map's hunters toward the town the same way a
+	# walked camp does, and whether one is at the gate the moment the visit
+	# closes depends on how much map time the frames above ran: at a fixed 240
+	# fps or faster (CI's runner) one is, and its approach card holds the
+	# calling's back. Not what this is about, so the road outside is cleared
+	# as the camps clear it.
+	_clear_road(main)
 	main._close_visit()
 	for i in 3:
 		await process_frame

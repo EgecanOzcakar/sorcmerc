@@ -3,7 +3,7 @@
 # who the road sends) and the world screen, so scenes/world/world.gd calls a
 # handful of lines here instead of learning either model.
 #
-#   RouteTravel.flag_on()                   # SORCMERC_ROUTES=1: a NEW world is built as a route world
+#   RouteTravel.flag_on()                   # a NEW world is built as a route world (unless SORCMERC_ROUTES=0)
 #   RouteTravel.adopt(world)                # ...which is this: the network, and nobody on the map but the company
 #   RouteTravel.on(world)                   # a route world? (world.routes != null — a save remembers)
 #   RouteTravel.go(world, "settlement:oakford")   # order the march; false when no known road goes there
@@ -11,6 +11,7 @@
 #   RouteTravel.search(world, party, rng)   # the Survival check at a fork: a lair's track, a hut's path
 #   RouteTravel.lead(world, landmark, e)    # a landmark's lead opens a trail (the owner's follow-up)
 #   RouteTravel.camp_ambush_pct(world, pos) # a camp anywhere on a road, as risky as that stretch
+#   RouteTravel.tick(world, now)            # the towns' bounties on the bands out on their roads
 #
 # WHAT A ROUTE WORLD IS, and why it is a property of the world rather than of
 # the flag. The flag only decides how a world is BORN: a map built while it is
@@ -20,13 +21,19 @@
 # because adopting a world mid-run would strand every band, job and raid it
 # holds. docs/spike-route-travel.md §6 is the plan this is phase 1 of.
 #
-# What this does NOT own: the network or the odds (the two models), the fight
-# (the approach card and _launch_combat, unchanged — a met band is an ordinary
-# World.RoamingParty), or any drawing. Phase 1 deliberately leaves out: raids
-# (their bands walk the map; phase 2 makes a raid a town state), hunt_party
-# jobs and a pack's authored bands (phase 2 pins them to edges), the minimap's
-# roads, and co-op (the guest reads the host's save, routes and all, but was
-# not driven through it).
+# Phase 2 adds the bands something names, pinned to a road (core/route_pins.gd):
+# a town's bounty, a raid standing at a gate (core/raids.gd pins it there — on
+# the roads a raid is a town state and a band at the gate, not a band walking
+# the map), a story's spawn_party, and a pack's world.json parties[] when a
+# pack's map is born a route world. step() meets one when the company walks
+# past where it stands; forget() puts it back when the meeting leaves it
+# standing.
+#
+# What this does NOT own: the network or the odds (the two models), the pins
+# (core/route_pins.gd), the fight (the approach card and _launch_combat,
+# unchanged — a met band is an ordinary World.RoamingParty), or any drawing.
+# Still left out: the minimap's roads, and co-op (the guest reads the host's
+# save, routes and all, but was not driven through it).
 extends RefCounted
 
 const World = preload("res://core/world.gd")
@@ -34,12 +41,16 @@ const WorldRoutes = preload("res://core/world_routes.gd")
 const RouteEncounters = preload("res://core/route_encounters.gd")
 const WorldLairs = preload("res://core/world_lairs.gd")
 const WorldCamp = preload("res://core/world_camp.gd")
+const WorldAI = preload("res://core/world_ai.gd")
+const RoutePins = preload("res://core/route_pins.gd")
 const RNG = preload("res://core/rng.gd")
 
 const FLAG := "SORCMERC_ROUTES"
 
+# Routes are the default (#231 phase 2b). SORCMERC_ROUTES=0 opts a new map out
+# into the free plane, where bands walk the map — kept while the owner wants it.
 static func flag_on() -> bool:
-	return OS.get_environment(FLAG) == "1"
+	return OS.get_environment(FLAG) != "0"
 
 static func on(world) -> bool:
 	return world != null and world.routes != null
@@ -48,15 +59,23 @@ static func on(world) -> bool:
 # band the builder put down is taken off again (the issue: enemy parties do not
 # spawn and are not on the map), and the company is set down on the nearest
 # known road, which is the only ground it will stand on from now on.
-static func adopt(world) -> void:
+#
+# `authored` is a pack's map (world.json parties[]): its bands were put there by
+# name, a story may name them, and they are pinned to the nearest road instead
+# of dropped (phase 2). A built-in map's bands are the builder's filler, and go.
+static func adopt(world, authored := false) -> void:
 	world.routes = WorldRoutes.build(world)
 	var player = world.player()
+	var bands: Array = world.parties.filter(func(q): return not q.is_player)
 	world.parties.clear()
 	if player != null:
 		world.parties.append(player)
 		player.position = snap(world, player.position)
 		player.goal = player.position
 		player.route.clear()
+	if authored:
+		for b in bands:
+			RoutePins.pin(world, b, "pack")
 	world.fallen.clear()
 	world.route_walked = 0.0
 
@@ -125,12 +144,16 @@ static func place_name(world, id: String) -> String:
 # Once a frame, after the move, with where the company stood before it. Returns
 # what the road did, in order — most frames, nothing:
 #   {"kind": "noticed", "edges": [...], "places": [names]}   a path seen leaving the road
-#   {"kind": "threat", "spec": {...}}                        RouteEncounters.roll() fired
-#   {"kind": "meet", "spec": {...}}                          RouteEncounters.meet() fired
-# A roll is made for every RouteEncounters.STEP the odometer crosses, keyed on
-# the edge and the odometer (RouteEncounters.step_key): every stretch walked is
-# a roll of its own, and a reload — which restores the odometer — is not a
-# reroll. The threat stream is rolled first; a meeting only on a quiet stretch.
+#   {"kind": "threat", "spec": {...}, "hostile": bool}       RouteEncounters.roll() fired
+#   {"kind": "meet", "spec": {...}, "hostile": false}        RouteEncounters.meet() fired
+#   {"kind": "threat"|"meet", "band": band, "hostile": bool} a pinned band was walked up to
+# A pinned band stood on this stretch is met first, and whatever the dice say
+# — it is what that stretch fields; the road does not roll again that frame.
+# Otherwise a roll is made for every RouteEncounters.STEP the odometer crosses,
+# keyed on the edge and the odometer (RouteEncounters.step_key): every stretch
+# walked is a roll of its own, and a reload — which restores the odometer — is
+# not a reroll. The threat stream is rolled first; a meeting only on a quiet
+# stretch.
 static func step(world, from: Vector2) -> Array:
 	var out: Array = []
 	var p = world.player()
@@ -145,6 +168,12 @@ static func step(world, from: Vector2) -> Array:
 		return out
 	var before: float = world.route_walked
 	world.route_walked += moved
+	var pinned = RoutePins.reached(world, from, p.position)
+	if pinned != null:
+		RoutePins.take(world, pinned)
+		var hostile: bool = WorldAI.is_hostile(pinned, p)
+		out.append({"kind": "threat" if hostile else "meet", "band": pinned, "hostile": hostile})
+		return out
 	var steps := int(floor(world.route_walked / RouteEncounters.STEP)) - int(floor(before / RouteEncounters.STEP))
 	if steps <= 0:
 		return out
@@ -152,11 +181,11 @@ static func step(world, from: Vector2) -> Array:
 	var key := RouteEncounters.step_key(String(at.get("edge", "off")), world.route_walked)
 	var threat := RouteEncounters.roll(world, p.position, key)
 	if not threat.is_empty():
-		out.append({"kind": "threat", "spec": threat})
+		out.append({"kind": "threat", "spec": threat, "hostile": bool(threat["hostile"])})
 		return out
 	var meeting := RouteEncounters.meet(world, p.position, key)
 	if not meeting.is_empty():
-		out.append({"kind": "meet", "spec": meeting})
+		out.append({"kind": "meet", "spec": meeting, "hostile": false})
 	return out
 
 # What the road sent, standing on the map where the company is, so the approach
@@ -170,19 +199,29 @@ static func band_for(world, spec: Dictionary):
 # A met band goes when the meeting is over, however it ended — fought, talked
 # down, slipped, or the company beaten. It was never on the map; it does not
 # linger on it, and nothing brings it back (WorldAI.respawn does not run here).
+# A pinned band that is still on the map — the meeting did not put it down —
+# goes back to where it stands (RoutePins.put_back).
 static func forget(world, band) -> void:
-	if band != null and String(band.ai.get("behavior", "")) == "met":
+	if band == null:
+		return
+	if RoutePins.is_pinned(band):
+		RoutePins.put_back(world, band)
+	elif String(band.ai.get("behavior", "")) == "met":
 		world.parties.erase(band)
 
 # A meeting the game was closed on ends with it: a save written while a road's
 # card was up carries the met band, and on a route world nothing would ever
-# move it or meet it again. Called when the world screen opens.
+# move it or meet it again. Called when the world screen opens. A pinned band
+# caught mid-meeting goes back on its spot.
 static func clear_met(world) -> void:
 	if not on(world):
 		return
 	for q in world.parties.duplicate():
-		if String(q.ai.get("behavior", "")) == "met":
-			world.parties.erase(q)
+		forget(world, q)
+
+# Once a frame on a route world: the towns' bounties (RoutePins.tick).
+static func tick(world, now: float) -> Array:
+	return RoutePins.tick(world, now) if on(world) else []
 
 # --- finding what is hidden -------------------------------------------------
 

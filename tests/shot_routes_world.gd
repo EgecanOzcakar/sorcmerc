@@ -1,6 +1,8 @@
 # #231 phase 1 — the world screen as a route world, for the PR: the roads the
 # company knows drawn on the map with the march on one of them, and the card
-# the road opens when it sends a band. Not a test.
+# the road opens when it sends a band. Phase 2: a raid standing pinned at
+# Greenmarch's gate (the town's label) and a bounty job's mark on the road its
+# band stands on. Not a test.
 #
 # Not headless — the capture needs a real rendering driver (xvfb-run is enough):
 #   godot --path . -s tests/shot_routes_world.gd   # -> docs/shots/route-travel-*.png
@@ -9,6 +11,8 @@ extends SceneTree
 const RouteTravel = preload("res://core/route_travel.gd")
 const RouteEncounters = preload("res://core/route_encounters.gd")
 const RNG = preload("res://core/rng.gd")
+const RoutePins = preload("res://core/route_pins.gd")
+const Raids = preload("res://core/raids.gd")
 
 func _init() -> void:
 	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/shot-%d" % randi())
@@ -25,6 +29,23 @@ func _init() -> void:
 	w.set_zoom(0.5)
 	w.center_on(Vector2(40, 40))
 	await _shoot(w, "res://docs/shots/route-travel-map.png")
+	# Phase 2: a day on, the towns have priced their bands, and the Tangle's
+	# raiders stand at Greenmarch's gate. Riverhold's bounty is taken.
+	var world = w.world
+	world.clock.elapsed = 1500.0
+	RoutePins.tick(world, world.clock.elapsed)
+	for l in world.lairs:
+		l.raid_at = world.clock.elapsed if l.id != "the-tangle" else world.clock.elapsed - Raids.RAID_AFTER - Raids.RAID_JITTER
+	Raids.tick(world, world.clock.elapsed)
+	var bounty = RoutePins.bounty_of(world, "riverhold")
+	w.party.quests.append({"id": "world:hunt_party:%s:0" % bounty.id, "kind": "hunt_party", "state": "active",
+		"target_party_id": bounty.id, "giver_node_id": "riverhold", "title": "Hunt down the band on the east road",
+		"progress": 0, "required": 1})
+	w._lairs3d.reset(world)
+	w.center_on(Vector2(200, -60))
+	w.queue_redraw()
+	await _shoot(w, "res://docs/shots/route-travel-pins.png")
+	w.party.quests.pop_back()
 	# What the road sends, on the card every band has always been met on.
 	var p = w.world.player()
 	var spec := RouteEncounters.compose(w.world, p.position, {"faction": "goblinoid", "source": "country"}, RNG.new(7), "shot")
