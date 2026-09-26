@@ -1,13 +1,19 @@
 # Spike: painted caricature faces for the heroes (#230)
 
 2026-09-26. A feasibility spike, not a feature: **nothing in the shipped game
-reads any of this yet.** What exists on the branch is a render tool
-(`tools/localgen/gen_hero_portraits.py`), 124 test renders made with it on the
-owner's local ComfyUI, nine contact sheets of them and four at game size
-(`docs/shots/hero-portraits-*`),
-and this document. §4 is what the generator can and cannot do. §5 is the
-pipeline and the code seam I recommend. §6 is the order the work lands in, and
-§7 is the questions only the owner can answer.
+reads any of this yet.** What exists:
+
+- **The render tool** (`tools/localgen/gen_hero_portraits.py`): prompts, templates,
+  the 29 peoples, cutting out onto one backdrop, and the contact sheets.
+- **The LoRA training script** (`tools/localgen/train_hero_lora.sh`).
+- **About 310 renders** made with them on the owner's local ComfyUI, and a style
+  LoRA trained on 31 of them.
+- **21 sheets** of those renders in `docs/shots/hero-portraits-*`.
+- **This document.**
+
+§4 is what the generator can and cannot do; §4.5 is what happened after the
+owner's calls. §5 is the pipeline and the code seam. §6 is the order the work
+lands in, and §7 is the owner's calls.
 
 ## 1. What #230 asks
 
@@ -73,8 +79,8 @@ by lineage.
 The field the matrix needs is small, and nothing in the rules reads it:
 
 - **`Character.look`**, `"a"` or `"b"`. It names *which picture*, not a
-  pronoun. The spike paints `a` masculine and `b` feminine. Whether it also
-  means gender in text is question 2 (§7).
+  pronoun. The spike paints `a` masculine and `b` feminine. By the owner's
+  call it is only a picture (§7).
 - **Old saves:** a missing key reads as `"ab"[hash(id) % 2]`. Every old hero
   gets a stable look and no migration is needed, which is the `*_save.gd`
   idiom.
@@ -170,25 +176,147 @@ way the relations web clips them.
 - **Disk:** at 512 px like every house painting, about 350 KB each, so
   **about 85 MB** in the repo. That is next to `assets/generated/`'s 137 MB.
 
+### 4.5 After the owner's calls: one backdrop, a gentler hand, and a style LoRA
+
+The owner picked the template's uniform huge heads (§7) and asked for three
+things along the way. Each one changed the pipeline:
+
+**One backdrop for every class.** The owner asked that the background gradient
+not change with the class. No prompt gets SDXL to paint the same gradient
+twice, so the figure is cut out after rendering and laid on one fixed
+gradient: lamplight brass behind the head (`COL_EDGE`), fading to the UI's
+panel brown at the corners (`COL_PANEL`, `core/ui_icons.gd`). This is
+`gen_hero_portraits.py --matte`. It runs rembg in its own venv
+(`~/localgen/matte`), and the ComfyUI `prompt` chunk is kept in each file.
+
+- **isnet** (rembg's general model) takes about 1 s an image, but it cut the
+  aasimar's white wings away every time.
+- **BiRefNet** kept them on 6 of 8 and kept every halo, at about 15 s an image
+  on the CPU. It is the default.
+
+Only picked files need cutting out, so that is about 4 CPU hours for all
+1038 pictures. Compare `hero-portraits-aasimar-angelic.jpg` with
+`hero-portraits-trainset.jpg`.
+
+**A less realistic hand.** The owner's note on the first class templates was
+"tune down the realistic drawing a bit". Recipe F is recipe E with:
+
+- "stylized storybook illustration, simplified shapes, smooth painted skin" in
+  the prompt;
+- photorealism, skin pores and heavy wrinkles in the negative.
+
+The heads and the kit held, and the skin went from oil-portrait wrinkles to
+flat painted planes (`hero-portraits-M3.jpg`). One seed in 24 went wrong in a
+new way: a monk holding a baby.
+
+**The class templates, then the peoples.**
+
+- *Stage 1* painted a human of every class off one master template (the gnome
+  druid) at 0.80, with the master's antlers and leaves in the negative.
+  - Off the wizard master at 0.85, every class read, but the heads came out
+    normal size and hats leaked onto the paladin, sorcerer and warlock
+    (`hero-portraits-M1.jpg`).
+  - Off the gnome master (`M3`), the heads stayed huge and 12/12 classes read.
+    4 of 24 leaked the master's horns, and 2 drifted to a full figure.
+- *Stage 2* painted each picked class template as two other peoples at 0.75,
+  at two seeds each (`hero-portraits-S2.jpg`, 48 renders). The style held
+  across all 48. The failures, which are not in the training set:
+  - **The goliath again:** 1 of 6 reads.
+  - **Beards leaked onto look b** off a bearded template: both dwarf fighters
+    and one aasimar cleric.
+  - **Two colours drifted to purple:** the blue dragonborn and the ashen
+    chthonic tiefling.
+
+  So a template holds the style and the class, and it pulls the face toward
+  its own. That is what the LoRA is for.
+
+**The LoRA, `sorcbobble`.**
+
+- **The trainer:** kohya `sd-scripts` v0.9.1, in its own venv at
+  `~/localgen/sd-scripts`. It needed three fixes: torch 2.14 cu130 to match
+  ComfyUI, bitsandbytes upgraded to 0.50, and numpy pinned below 2 for its
+  pinned OpenCV.
+- **The recipe** (`tools/localgen/train_hero_lora.sh`): an SDXL LoRA, UNet
+  only, dim 16 / alpha 8, fp8 base, cached latents and text-encoder outputs,
+  gradient checkpointing, batch 1 at 1024², Adafactor at 1e-4, 1500 steps.
+  On the 8 GB card that is 6.5 GB and 2.2 s a step, about 55 minutes.
+  ComfyUI has to be stopped while it runs.
+- **The training set: 31 picks.** The 12 stage-1 class templates plus 19
+  stage-2 peoples, every one cut out onto the backdrop
+  (`hero-portraits-trainset.jpg`). Each caption is the trigger word plus the
+  plain people, look and class words, so those stay promptable and the style
+  is what the trigger learns.
+- **The provenance note** is "SDXL base, plus a LoRA trained on our own
+  SDXL renders".
+
+**What the LoRA does.** The test was 12 keys that were **not** in the training
+set, aimed at stage 2's failures: two goliaths, a blue dragonborn, a chthonic
+tiefling and a dwarf woman, among others. Each ran as plain txt2img through
+recipe L (the trigger plus the caption words) at 1.0 strength, one seed each,
+at each saved step (`hero-portraits-lora-steps.jpg`: 500, 1000 and 1500 from
+the top).
+
+- **Steps 500 and 1000 are undertrained.** They paint character-sheet
+  duplicates (three blue dragon heads, a turnaround of the orc) and the
+  backdrop is not settled yet.
+- **Step 1500 is the one**, cut out onto the backdrop in `hero-portraits-lora.jpg`:
+  - **The backdrop comes out of the model**, the same brass-to-brown on 12/12,
+    before any cutting.
+  - **People 11/12.** The goliath reads **2/2**: stone-cracked grey skin on the
+    fighter, fire cracks on the cleric, against 1/6 off the templates. The
+    blue dragonborn is blue, the silver one is silver, and the aasimar druid
+    has its halo, its wings *and* its leaves. The one miss: the chthonic
+    tiefling came out brown instead of ashen.
+  - **Class 10/12.** The silver dragonborn bard lost its lute, and the forest
+    gnome paladin wears a robe.
+  - **Look 12/12, and no beards** on the dwarf woman.
+  - **One uniform style** on all 12, and at 40 px every people still reads
+    (`hero-portraits-lora-small.png`).
+  - **Two defects.** The monk drifted to a seated full figure, and **9 of 12
+    stand on a pale smear**. The cutout step keeps the smear as part of the
+    figure. The LoRA learnt it from the training cutouts, which carried a
+    little of the templates' light ground under each bust.
+
+  **About 8 of 12 pass everything but the smear.** That is against about 8 of
+  24 for prompt-only recipe E, from one seed each, at txt2img speed, with no
+  template per key.
+
+So the pipeline the owner asked for works. The next training round fixes the
+smear from the data side:
+
+- clean the bottom edge of every training cutout (cut the busts off square at
+  the frame, or erode the alpha there);
+- replace the three off-colour peoples with renders that match their
+  captions;
+- add a few more seated or full-figure negatives.
+
+
 ## 5. Recommendation
 
 ### 5.1 The pipeline
 
-1. **Twelve class templates**, one per class. Each is a big-head bust with its
-   kit, **bareheaded or with headgear that leaves the ears showing**, and no
-   spectacles or other props that would leak. The owner picks them from the
-   `--spread` renders or a dedicated run.
-2. **img2img each species × look from its class's template** at about 0.75–0.8,
-   4 seeds each, with recipe E's words. A reviewer picks one per key.
-3. **The peoples a template washes out** (aasimar, goliath, and drow if
-   lineages come in) get either their own template per class or a denoise near
-   0.85, whichever the picks prefer. This is measured per species on the first
-   full run, not guessed here.
-4. **If the picks still will not agree**, train a small SDXL LoRA on the
-   approved picks. The picks are our own SDXL output, so the provenance stays
-   "SDXL base, plus a LoRA trained on our own renders". SDXL LoRA training fits
-   in 8 GB, barely (batch 1, gradient checkpointing). It needs kohya or
-   OneTrainer installed, and is question 6.
+As measured in §4.5, not as first guessed:
+
+1. **Twelve class templates**, painted with recipe F off one master template
+   at 0.80, and picked one per class (done: `hero-portraits-M3.jpg`).
+2. **Each template repainted as other peoples** at 0.75 (stage 2). This is
+   only to grow the training set, not to paint the matrix.
+3. **The style LoRA `sorcbobble`**, trained on the clean picks from both
+   stages (done, round one: 31 images, about 55 minutes).
+4. **The matrix itself by txt2img through the LoRA**, recipe L, 4 seeds a key.
+   A reviewer picks one per key, and the pick is cut out onto the one
+   backdrop (`--matte`). That is 696 heroes and 342 foes, about 26 GPU hours
+   at 4 seeds (or 13 at 2), plus about 4 CPU hours of cutting out.
+5. **A second training round before phase 2 starts** (§4.5's fixes: clean
+   bottom edges, the off-colour peoples replaced). Then again whenever the
+   picks show a people or a class the LoRA keeps getting wrong. Every round
+   is the same script on a bigger set of picks.
+
+The provenance note is "SDXL base, plus a LoRA trained on our own SDXL
+renders". The trainer (`~/localgen/sd-scripts`) and the cutout venv
+(`~/localgen/matte`) are on the owner's machine. The recipes that drive them
+are in the repo (`tools/localgen/gen_hero_portraits.py`,
+`tools/localgen/train_hero_lora.sh`).
 
 Every picked file keeps ComfyUI's `prompt` tEXt chunk, as in `assets/generated/`.
 They go in a new **`assets/portraits/`** directory with its own `PROVENANCE.md`,
@@ -204,8 +332,9 @@ time (`tools/localgen/`), not only in `~/localgen/`.
 - **The five places in §2 call it** instead of `bust()` / `figure()`. The turn
   strip and the combat card have only the combatant. Its resolved `sheet`
   carries neither species nor look, so they find the hero by `c.id`, which
-  the adapter sets to `ch.id` (`core/adapter.gd:146`). Foes keep `bust()`
-  (question 4).
+  the adapter sets to `ch.id` (`core/adapter.gd:146`). Foes go through
+  `Portraits.foe(c, px)`, keyed on `c.src_id`, then its faction, then
+  today's `bust()` (the owner's call, §7).
 - **The two whole-figure places** (combat card 92 × 158, trait moment 300 × 520)
   **become bust-framed**. That is a layout change to both, not a swap.
 - A texture loads headless where a `SubViewport` does not. `hero()` would
@@ -227,38 +356,52 @@ time (`tools/localgen/`), not only in `~/localgen/`.
 
 ## 6. The order it lands in
 
-1. **This spike.**
-2. **Phase 1: the field and the seam.** `Character.look` (save default, recruit
-   hash, creator pick, presets), `Portraits.hero()` with the rig-bust fallback,
-   the five places, the two layouts, the coverage test (allowed to be
-   incomplete until phase 2 fills it), and the bible's art section. It ships
-   with no painted file and looks the same as today.
-3. **Phase 2: the art.** Twelve templates, then 240 × 4 renders, the picks, and
-   `assets/portraits/` with its provenance. Each species can land as its own PR,
+As changed by the owner's calls (§7):
+
+1. **This spike**, with the style LoRA trained (§4.5).
+2. **Phase 1: the field and the seam.** This covers:
+   - `Character.look`: the save default, the recruit hash, a creator pick and
+     the presets.
+   - `Portraits.hero(ch, px)` for heroes and `Portraits.foe(c, px)` for
+     foes, both falling back to the rig bust.
+   - The five places, and the two whole-figure layouts reframed as busts.
+   - A coverage test, allowed to be incomplete until phase 2 fills it.
+   - The bible's art section.
+
+   It ships with no painted file and looks the same as today.
+3. **Phase 2: the heroes' art**, by lineage: 29 peoples × 12 classes × 2
+   looks = **696 pictures**. The LoRA paints them from the prompt, and the
+   picks land in `assets/portraits/` with a `PROVENANCE.md`. One PR per people,
    since the fallback covers the rest.
-4. **Phase 3, if asked:** lineages (dragonborn colours first, then drow), foe
-   faces, a face on the screens that show only text today (the profile's
-   header, the hiring rows), and a way for a pack to ship hero portraits for
-   its own species.
+4. **Phase 3: the foes' art**, one bust per bestiary id, **342 pictures**. The
+   lookup falls back to the id's faction and then to the rig bust. By
+   faction: beast 87, monstrosity 40, dragon 35, humanoid 22, undead 19,
+   elemental 16, giant 16, bandit 12, and 17 more under 12 each. One PR per
+   faction.
+5. **Later, if asked:** a face on the screens that show only text today (the
+   profile's header, the hiring rows), and a way for a pack to ship portraits
+   for its own species and monsters.
 
-## 7. Questions for the owner
+## 7. The owner's calls (2026-09-26)
 
-1. **How funny?** Recipe E is caricatured faces at nearly normal proportions,
-   varied and each one different (`hero-portraits-E.jpg`). The template is true
-   bobbleheads, one uniform set, where some peoples wash out
-   (`hero-portraits-Et75.jpg`). I recommend the template, for "huge funny heads"
-   and for how they read at 40 px.
-2. **Is the look a gender?** The spike paints two looks. Should `look` stay a
-   picture only, or should text (barks, moments) read pronouns from it? I
-   recommend a picture only for now; pronouns are their own piece of work. And
-   are the name lists split by look?
-3. **Species or lineage?** 240 pictures or 696. I recommend species now and
-   dragonborn colours first if lineages follow; ten colours of one people is
-   the difference a player notices most.
-4. **Foes on the turn strip.** Painted heroes beside rig-rendered foes is two
-   styles on one strip. Keep that, or paint foe faces per faction later?
-5. **Dwarf women: bearded or not?** Unbearded, they read as small human women
-   (rounds D and E). 5e allows either.
-6. **A LoRA, if the template is not enough?** It means installing a trainer on
-   the owner's machine. The provenance note would say it was trained on our own
-   picks.
+Asked at the end of the spike and answered the same day. What each one
+changed:
+
+1. **Uniform huge heads.** The template's style (`hero-portraits-Et75.jpg`),
+   not recipe E's varied faces.
+2. **The look is only a picture.** `Character.look` picks the portrait and
+   nothing reads it as a pronoun. The name lists stay as they are.
+3. **Paint by lineage**: 696 hero pictures, not 240 (§6, phase 2).
+4. **Paint the foes as well**: 342 more, one per bestiary id (§6, phase 3).
+5. **No bearded women.** Kept in the negative for look `b` (`NEG_LOOK`).
+6. **Templates are good, but install the trainer and train.** kohya
+   `sd-scripts` is now on the owner's machine, and the LoRA is trained on
+   template renders (§4.5).
+
+Asked separately the same day: **the aasimar should be more angelic, with a
+halo.** Its description now asks for a floating halo ring, small feathered
+wings, golden eyes and luminous skin (`hero-portraits-aasimar-angelic.jpg`).
+From the prompt alone that gave the halo and wings 8/8, but also golden-angel
+paintings in which the class and the caricature were lost. Off the wizard
+template it gave the halo 4/4 and no wings. The LoRA pass (§4.5) is what holds
+the halo together with the style.

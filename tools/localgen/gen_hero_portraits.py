@@ -24,6 +24,7 @@ Sequential: one GPU, 8 GB, each job queued after the last one finishes.
 import argparse
 import json
 import os
+import re
 import time
 import urllib.request
 
@@ -38,12 +39,39 @@ SPECIES = {
     "elf": "an elf with very long pointed ears and sharp fine features",
     "gnome": "a tiny gnome with an enormous nose, huge bright eyes and wild hair",
     "halfling": "a halfling with a round cheerful face, rosy cheeks and curly hair",
-    "aasimar": "an aasimar with (glowing golden eyes:1.3), (a faint golden halo of light behind the head:1.2) and pale luminous skin",
+    "aasimar": "an angelic aasimar with (a glowing golden halo ring floating above the head:1.4), (small white feathered angel wings rising behind the shoulders:1.2), radiant golden eyes and softly luminous skin",
     "dragonborn": "a dragonborn, a dragon-headed humanoid with a scaled snout, bronze scales and small back-swept horns, no hair",
     "goliath": "a goliath, a towering bald giant-kin with (slate grey skin:1.4) like weathered stone, dark stone-like markings on the face",
     "orc": "an orc with grey-green skin, a heavy jaw and two big tusks",
     "tiefling": "a tiefling with red skin, two large curling horns and solid gold eyes",
 }
+# The owner's call (spike doc §7): paint by lineage. A lineage's people is
+# written `<species>_<lineage>` (the game's own lineage id after the
+# underscore), 24 of them beside the five species that have none: 29 peoples.
+_DRAGON = "a dragonborn, a dragon-headed humanoid with a scaled snout, (%s scales:1.3), small back-swept horns, no hair"
+_GOLIATH = "a goliath, a towering bald giant-kin with (%s:1.4), dark stone-like markings on the face"
+LINEAGES = {
+    "elf_drow": "a drow elf with (dark grey-purple skin:1.3), stark white hair and very long pointed ears",
+    "elf_high-elf": "a high elf with very long pointed ears, sharp fine features, pale skin and silver-blond hair",
+    "elf_wood-elf": "a wood elf with very long pointed ears, tanned freckled skin and leaf-brown hair",
+    "gnome_forest": "a tiny forest gnome with an enormous nose, huge bright eyes and wild mossy-brown hair",
+    "gnome_rock": "a tiny rock gnome with an enormous nose, huge bright eyes, wild hair and brass goggles on the brow",
+    "goliath_cloud": _GOLIATH % "pale blue-grey skin, wisps of cloud about the shoulders",
+    "goliath_fire": _GOLIATH % "dark grey skin with glowing ember-red cracks",
+    "goliath_frost": _GOLIATH % "icy blue-white skin, frost on the brows",
+    "goliath_hill": _GOLIATH % "ruddy brown-grey skin, a heavy brow",
+    "goliath_stone": _GOLIATH % "slate grey skin like weathered stone",
+    "goliath_storm": _GOLIATH % "dark grey skin, crackling blue sparks",
+    "tiefling_abyssal": "a tiefling with (deep purple skin:1.3), jagged black horns and glowing yellow eyes",
+    "tiefling_chthonic": "a tiefling with (ashen grey skin:1.3), black backswept horns and pale silver eyes",
+    "tiefling_infernal": "a tiefling with (red skin:1.3), two large curling ram horns and solid gold eyes",
+}
+for _c in ("black", "blue", "green", "red", "white"):
+    LINEAGES["dragonborn_chromatic-" + _c] = _DRAGON % _c
+for _c in ("brass", "bronze", "copper", "gold", "silver"):
+    LINEAGES["dragonborn_metallic-" + _c] = _DRAGON % ("gleaming metallic " + _c)
+PEOPLES = [sp for sp in SPECIES if not any(k.startswith(sp + "_") for k in LINEAGES)] + sorted(LINEAGES)
+
 # ponytail: two looks, "a" and "b", painted masculine and feminine. The game has
 # no gender field (spike doc §3); the key names a look, not a pronoun.
 LOOKS = {"a": "man", "b": "woman"}
@@ -111,6 +139,21 @@ NEG = {"A": NEG_BASE + ", cartoon, anime", "B": NEG_BASE + ", anime",
        "D": NEG_BASE + ", anime, realistic proportions, photo, sculpture, statue, bust statue, clay, "
             "figurine, pedestal, plinth, floating head, severed head, bare neck"}
 NEG["E"] = NEG["D"]
+# F: the owner on stage 1's class templates (2026-09-26): "tune down the
+# realistic drawing a bit". E's words, with the rendering pushed toward a
+# storybook painting: simpler shapes, smooth painted skin, no pores or
+# photographic wrinkles.
+RECIPES["F"] = ("(caricature:1.3) of a ({sex}:1.3) ({who}:1.2), ({kit}:1.2). (huge oversized head:1.4), "
+                "small body, funny exaggerated face, chest-up bust facing the viewer, plain backdrop, "
+                "(stylized storybook illustration:1.2), simplified shapes, smooth painted skin, soft painterly "
+                "shading, oil brushwork, rich muted palette, soft rim light, 1:1")
+NEG["F"] = NEG["D"] + (", (photorealistic:1.3), realistic, hyperrealism, detailed skin texture, skin pores, "
+                       "heavy wrinkles, photograph")
+# L: txt2img through the trained style LoRA (§4.5). The words are the
+# captions' words, so the style comes from the trigger and the prompt only has
+# to say who and what.
+RECIPES["L"] = "sorcbobble, a ({sex}:1.2) ({who}:1.2), ({kit}:1.1)"
+NEG["L"] = NEG["D"]
 SEX = {"a": "male", "b": "female"}
 # A look-b dwarf came out bearded both times in round one: say it twice.
 NEG_LOOK = {("dwarf", "b"): ", beard, moustache", ("goliath", "b"): ", beard"}
@@ -123,8 +166,21 @@ def key(species: str, cls: str, look: str) -> str:
     return "%s-%s-%s" % (species, cls, look)
 
 
+TRIGGER = "sorcbobble"
+
+
+def plain(text: str) -> str:
+    """A prompt fragment without its (weights:1.3)."""
+    return re.sub(r"\(([^()]*?):[0-9.]+\)", r"\1", text)
+
+
+def prompt_who(species: str, look: str) -> str:
+    base = LINEAGES.get(species) or SPECIES[species]
+    return SPECIES_LOOK.get((species, look), base) + " " + LOOKS[look]
+
+
 def prompt(recipe: str, species: str, cls: str, look: str) -> str:
-    who = SPECIES_LOOK.get((species, look), SPECIES[species]) + " " + LOOKS[look]
+    who = prompt_who(species, look)
     return RECIPES[recipe].format(who=who, kit=CLASSES[cls], sex=SEX[look])
 
 
@@ -134,7 +190,7 @@ def spread() -> list:
     return [(sp[i % len(sp)], c, "ab"[i % 2]) for i, c in enumerate(CLASSES)]
 
 
-def workflow(text: str, neg: str, prefix: str, seed: int, init="", denoise=1.0) -> dict:
+def workflow(text: str, neg: str, prefix: str, seed: int, init="", denoise=1.0, lora="", lora_w=1.0) -> dict:
     g = {
         "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "sd_xl_base_1.0.safetensors"}},
         "5": {"class_type": "EmptyLatentImage", "inputs": {"width": 1024, "height": 1024, "batch_size": 1}},
@@ -154,11 +210,17 @@ def workflow(text: str, neg: str, prefix: str, seed: int, init="", denoise=1.0) 
         g["10"] = {"class_type": "LoadImage", "inputs": {"image": init}}
         g["11"] = {"class_type": "VAEEncode", "inputs": {"pixels": ["10", 0], "vae": ["4", 2]}}
         g["3"]["inputs"]["latent_image"] = ["11", 0]
+    if lora:
+        # A UNet-only LoRA (train_hero_lora.sh), so it loads on the model alone.
+        g["12"] = {"class_type": "LoraLoaderModelOnly",
+                   "inputs": {"model": ["4", 0], "lora_name": lora, "strength_model": lora_w}}
+        g["3"]["inputs"]["model"] = ["12", 0]
     return g
 
 
-def run(text: str, neg: str, prefix: str, seed: int, init="", denoise=1.0, timeout=300) -> None:
-    body = json.dumps({"prompt": workflow(text, neg, prefix, seed, init, denoise)}).encode()
+def run(text: str, neg: str, prefix: str, seed: int, init="", denoise=1.0, lora="", lora_w=1.0,
+        timeout=300) -> None:
+    body = json.dumps({"prompt": workflow(text, neg, prefix, seed, init, denoise, lora, lora_w)}).encode()
     req = urllib.request.Request(HOST + "/prompt", data=body, headers={"Content-Type": "application/json"})
     resp = json.loads(urllib.request.urlopen(req, timeout=15).read())
     if resp.get("node_errors"):
@@ -170,6 +232,53 @@ def run(text: str, neg: str, prefix: str, seed: int, init="", denoise=1.0, timeo
                 return
         time.sleep(2)
     raise TimeoutError(prefix)
+
+
+# The owner's call (2026-09-26): one backdrop behind every face, whatever the
+# class. SDXL never paints the same gradient twice, so the figure is cut out
+# (rembg's BiRefNet, which keeps the aasimar's wings where isnet cut them)
+# and laid on this one: lamplight brass behind the head fading to the UI's
+# panel colour at the corners (core/ui_icons.gd COL_EDGE -> COL_PANEL).
+BACK_IN, BACK_OUT = (0x4a, 0x3d, 0x2c), (0x22, 0x1c, 0x16)
+
+
+def backdrop(size: int):
+    from PIL import Image
+    import numpy as np
+    y, x = np.mgrid[0:size, 0:size] / (size - 1)
+    # centred on the head, which sits in the upper middle of every bust
+    t = np.clip(np.hypot(x - 0.5, (y - 0.4) * 0.9) / 0.75, 0, 1)[..., None]
+    rgb = np.array(BACK_IN) * (1 - t) + np.array(BACK_OUT) * t
+    return Image.fromarray(rgb.astype("uint8"), "RGB")
+
+
+def matte(src: str, out: str) -> None:
+    """Every hero_* render in src, cut out and laid on the one backdrop, saved
+    under the same name in out with the render's own prompt chunk kept. Run it
+    with the rembg venv's python (~/localgen/matte/.venv)."""
+    from PIL import Image, PngImagePlugin
+    from rembg import new_session, remove
+    session = new_session(os.environ.get("MATTE_MODEL", "birefnet-general"))
+    os.makedirs(out, exist_ok=True)
+    back = None
+    for f in sorted(f for f in os.listdir(src) if f.startswith("hero_") and f.endswith(".png")):
+        im = Image.open(os.path.join(src, f))
+        meta = PngImagePlugin.PngInfo()
+        for k, v in im.text.items():
+            meta.add_text(k, v)
+        if back is None or back.size != im.size:
+            back = backdrop(im.size[0])
+        cut = remove(im.convert("RGB"), session=session)
+        pic = back.copy()
+        pic.paste(cut, (0, 0), cut)
+        pic.save(os.path.join(out, f), pnginfo=meta)
+        # The LoRA's caption (§4.5): the trigger word and the plain words for
+        # people, look and class, so those stay promptable and the rest of
+        # what the picture has in common — the style — goes to the trigger.
+        sp, cl, lk = f.split("_", 2)[2].split("~")[0].rsplit("-", 2)
+        with open(os.path.join(out, f[:-4] + ".txt"), "w") as t:
+            t.write("%s, a %s %s, %s" % (TRIGGER, SEX[lk], plain(prompt_who(sp, lk)), plain(CLASSES[cl])))
+        print("matte", f, flush=True)
 
 
 def sheet(src: str, out: str) -> None:
@@ -206,20 +315,28 @@ if __name__ == "__main__":
     ap.add_argument("--seeds", type=int, default=1)
     ap.add_argument("--seed0", type=int, default=2300)
     ap.add_argument("--sheet", default="")
+    ap.add_argument("--matte", default="", help="cut out every render in this folder onto the backdrop, into --out")
     ap.add_argument("--out", default=".")
     ap.add_argument("--init", default="", help="a template render in ComfyUI/input for img2img")
     ap.add_argument("--denoise", type=float, default=1.0)
+    ap.add_argument("--lora", default="", help="a LoRA in ComfyUI/models/loras, e.g. sorcbobble.safetensors")
+    ap.add_argument("--lora-w", type=float, default=1.0)
+    ap.add_argument("--neg-extra", default="", help="appended to the negative, e.g. a template's props")
+    ap.add_argument("--tag", default="", help="names the run in the output file instead of the recipe")
     a = ap.parse_args()
+    if a.matte:
+        matte(os.path.expanduser(a.matte), a.out)
+        raise SystemExit
     if a.sheet:
         sheet(os.path.expanduser(a.sheet), a.out)
         raise SystemExit
-    keys = spread() if a.spread else [tuple(k.split("-")) for k in a.only.split(",") if k]
+    keys = spread() if a.spread else [tuple(k.rsplit("-", 2)) for k in a.only.split(",") if k]
     jobs = [(k, a.seed0 + s) for k in keys for s in range(a.seeds)]
     for n, ((sp, cl, lk), seed) in enumerate(jobs, 1):
-        tag = a.recipe + ("t%02d" % round(a.denoise * 100) if a.init else "")
+        tag = a.tag or a.recipe + ("t%02d" % round(a.denoise * 100) if a.init else "")
         name = "hero_%s_%s~%d" % (tag, key(sp, cl, lk), seed)
         t = time.time()
-        neg = NEG[a.recipe] + (NEG_LOOK.get((sp, lk), "") if a.recipe >= "C" else "") \
-            + (NEG_SPECIES.get(sp, "") if a.recipe >= "D" else "")
-        run(prompt(a.recipe, sp, cl, lk), neg, name, seed, a.init, a.denoise)
+        neg = NEG[a.recipe] + (NEG_LOOK.get((sp.split("_")[0], lk), "") if a.recipe >= "C" else "") \
+            + (NEG_SPECIES.get(sp.split("_")[0], "") if a.recipe >= "D" else "") + (", " + a.neg_extra if a.neg_extra else "")
+        run(prompt(a.recipe, sp, cl, lk), neg, name, seed, a.init, a.denoise, a.lora, a.lora_w)
         print("[%d/%d] %s %.0fs" % (n, len(jobs), name, time.time() - t), flush=True)
