@@ -79,6 +79,7 @@ func _quiet_night(main) -> void:
 		main.world.clock.elapsed += 1.0
 
 func _init() -> void:
+	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
 	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/%d-%d" % [OS.get_process_id(), randi()])
 	var main = load("res://scenes/world/world.tscn").instantiate()
 	root.add_child(main)

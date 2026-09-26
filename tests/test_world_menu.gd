@@ -43,6 +43,7 @@ func key(main, code: int) -> void:
 	main._unhandled_key_input(ev)
 
 func _init() -> void:
+	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
 	var main = load("res://scenes/world/world.tscn").instantiate()
 	root.add_child(main)
 	for i in 10:

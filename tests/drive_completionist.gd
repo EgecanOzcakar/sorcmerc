@@ -158,6 +158,7 @@ var _frames := 0
 var _region0 := ""          # the country the tour started in; a crossing is a different one
 
 func _init() -> void:
+	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
 	# This process's own autosave slots, so a concurrent godot run cannot clobber
 	# them — same shape as every other driver here.
 	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/%d-%d" % [OS.get_process_id(), randi()])
