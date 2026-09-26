@@ -307,9 +307,10 @@ static func _offhand_verb(offhand: Dictionary, attacks: Array, s) -> Dictionary:
 		"once_per": "turn", "targeting": "enemy", "range": reach,
 		"to_hit": int(offhand["to_hit"]),
 		"damage": PassGear.notation(int(offhand["dice_count"]), int(offhand["dice_sides"]), dmg),
-		# #241: which weapon swings, by id, so the bar can draw it
-		# (Icons.skill_icon). Display only — resolve_attack reads the damage and
-		# to_hit above, and "weapon" (the name) is what the log prints.
+		# #241: which weapon swings, so the bar can draw it (Icons.skill_icon).
+		# Display only — resolve_attack reads the damage and to_hit above. Its
+		# own key: #245's "weapon" above is the NAME the log says, and the two
+		# merged as one duplicate key, which Godot 4.7 refuses to compile.
 		"weapon_id": String(offhand["id"]),
 	}
 
