@@ -3,7 +3,7 @@
 # who the road sends) and the world screen, so scenes/world/world.gd calls a
 # handful of lines here instead of learning either model.
 #
-#   RouteTravel.flag_on()                   # SORCMERC_ROUTES=1: a NEW world is built as a route world
+#   RouteTravel.flag_on()                   # a NEW world is built as a route world (unless SORCMERC_ROUTES=0)
 #   RouteTravel.adopt(world)                # ...which is this: the network, and nobody on the map but the company
 #   RouteTravel.on(world)                   # a route world? (world.routes != null — a save remembers)
 #   RouteTravel.go(world, "settlement:oakford")   # order the march; false when no known road goes there
@@ -47,8 +47,10 @@ const RNG = preload("res://core/rng.gd")
 
 const FLAG := "SORCMERC_ROUTES"
 
+# Routes are the default (#231 phase 2b). SORCMERC_ROUTES=0 opts a new map out
+# into the free plane, where bands walk the map — kept while the owner wants it.
 static func flag_on() -> bool:
-	return OS.get_environment(FLAG) == "1"
+	return OS.get_environment(FLAG) != "0"
 
 static func on(world) -> bool:
 	return world != null and world.routes != null

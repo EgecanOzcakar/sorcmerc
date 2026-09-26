@@ -169,8 +169,8 @@ func _run() -> void:
 	screen.queue_free()
 	await process_frame
 
-	# Without the flag, a new map is the free plane it always was.
-	OS.set_environment(RouteTravel.FLAG, "")
+	# Opted out (SORCMERC_ROUTES=0), a new map is the free plane it always was.
+	OS.set_environment(RouteTravel.FLAG, "0")
 	var free = load("res://scenes/world/world.tscn").instantiate()
 	root.add_child(free)
 	await process_frame
