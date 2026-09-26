@@ -29,6 +29,7 @@ extends SceneTree
 
 const Adapter = preload("res://core/adapter.gd")
 const Callings = preload("res://core/callings.gd")
+const RoadEvents = preload("res://core/road_events.gd")
 const Catalog = preload("res://core/rules/catalog.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const Encounter = preload("res://core/encounter.gd")
@@ -51,7 +52,8 @@ const DOCS := "res://docs/modding.md"
 const DOCUMENTED := ["manifest.kinds", "manifest.access", "manifest.data_files",
 	"effects.kinds", "effects.reaction_triggers", "quest.kinds", "story.beat_kinds",
 	"story.condition_keys", "story.effect_keys", "story.quest_states",
-	"world.kinds", "world.behaviors", "world.factions", "world.bands", "items.slots", "items.keys"]
+	"world.kinds", "world.behaviors", "world.factions", "world.bands", "items.slots", "items.keys",
+	"road_events.effects", "road_events.needs", "road_events.roles"]
 
 const ID_FILES := ["spells.json", "bestiary.json", "monsters.json", "magic-items.json",
 	"classes.json", "subclasses.json", "species.json", "backgrounds.json", "feats.json",
@@ -86,6 +88,9 @@ static func vocab() -> Dictionary:
 		"world.roles": WorldPack.ROLES, "world.factions": Scaler.FACTIONS, "world.bands": bands,
 		"encounter.themes": Encounter.THEMES, "callings.done_by": Callings.DONE_BY.keys(),
 		"items.slots": PassItems.SLOTS, "items.keys": PassItems.KEYS,
+		"road_events.effects": RoadEvents.EFFECTS,
+		"road_events.needs": RoadEvents.NEEDS.filter(func(n): return n != ""),
+		"road_events.roles": RoadEvents.ROLES.filter(func(n): return n != ""),
 	}
 
 static func ids() -> Dictionary:

@@ -156,6 +156,12 @@ func _run() -> void:
 			fork = e["notice"][0]
 			break
 	check(fork != "", "a hidden lair track leaves a known fork")
+	# The road's cards come in twos now (#232: the question, then the answer),
+	# so the last lap can end with the answer still up — and a card up hides
+	# every map button, the lair button among them. Answer what is up first.
+	while screen._event_card != null:
+		screen._event_card.acknowledged.emit()
+		await step(1)
 	p.position = w.routes.nodes[fork]["position"]
 	w.set_goal(p, p.position)
 	screen._check_lairs()
