@@ -5734,7 +5734,17 @@ func _gui_input(e: InputEvent) -> void:
 		elif e.button_index == MOUSE_BUTTON_LEFT and not spectator:   # the guest looks; the host orders
 			var p := world.player()
 			var band = _band_at(e.position)
-			if band != null:
+			# A band already met and parted with (slipped past, or under a
+			# truce) standing on a town does not eat the click on the town:
+			# the place wins, and the march goes there. A fresh band on the
+			# same spot is still the road doing its job — the click meets it.
+			var place = _place_at(e.position) if band != null and _parted_with(band) else null
+			if place != null and p != null and not RouteTravel.on(world):
+				_drop_meet()
+				world.set_goal(p, place.position)
+			elif place != null and p != null:
+				_route_click(e.position)
+			elif band != null:
 				_seek(band)
 			elif p != null and RouteTravel.on(world):
 				_route_click(e.position)
@@ -5742,6 +5752,27 @@ func _gui_input(e: InputEvent) -> void:
 				_drop_meet()
 				world.set_goal(p, _click_target(e.position))
 		queue_redraw()
+
+# A band the company has met and parted with: slipped past, or under a truce.
+func _parted_with(band) -> bool:
+	return _slipped.has(band.id) or WorldAI.in_truce(band, world.clock.elapsed)
+
+# The known place under screen point `sp` — a town, a found lair, a found
+# landmark — within ROUTE_PICK screen pixels, or null.
+func _place_at(sp: Vector2):
+	var at := _click_target(sp)
+	var reach: float = ROUTE_PICK / maxf(0.01, ISO_GAIN * _zoom)
+	var best = null
+	var best_d := reach
+	var places: Array = world.settlements.duplicate()
+	places.append_array(world.lairs.filter(func(l): return l.discovered))
+	places.append_array(world.landmarks.filter(func(m): return m.found))
+	for x in places:
+		var d: float = at.distance_to(x.position)
+		if d <= best_d:
+			best = x
+			best_d = d
+	return best
 
 # #231: on the roads a click is a place, never ground — the company goes there by
 # the known roads, or not at all (the owner's call: it never leaves the road).
