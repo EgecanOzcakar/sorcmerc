@@ -12,15 +12,26 @@
 # not two cameras that have to be kept in step by hand (which is exactly what
 # the four separate viewports this replaced got wrong, and what #58 was).
 #
+# Run twice, once per kind of map (#231): on the free plane (SORCMERC_ROUTES=0,
+# the opt-out) and on the roads (the default). The camera is the same camera on
+# both; what a click on a turned map MEANS is not. On the free plane it marches
+# to the ground under the cursor. On the roads a click names a place — the
+# town, found lair or found landmark under the cursor — and the company goes
+# there by road, or nowhere: a click on open ground gives no order. Both are
+# asked at a turned, tilted camera, where a _pix/_unpix that disagreed with the
+# real Camera3D would send the company somewhere else.
 #   godot --headless --path . -s tests/test_world_camera.gd
 extends SceneTree
 
+const RouteTravel = preload("res://core/route_travel.gd")
+
 var _pass := 0
 var _fail := 0
+var _mode := ""
 
 func check(cond: bool, label: String) -> void:
 	if cond: _pass += 1
-	else: _fail += 1; printerr("  FAIL: ", label)
+	else: _fail += 1; printerr("  FAIL: ", _mode, label)
 
 # Every angle below is one the camera can actually be put at, including both
 # ends of the tilt clamp — the shallow end is where the projection's sin(pitch)
@@ -28,7 +39,15 @@ func check(cond: bool, label: String) -> void:
 const ANGLES := [[35.0, 22.332], [0.0, 45.0], [115.0, 12.0], [250.0, 82.0], [359.0, 60.0]]
 
 func _init() -> void:
-	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
+	await _run(false)
+	await _run(true)
+	print("test_world_camera: %d passed, %d failed" % [_pass, _fail])
+	quit(1 if _fail > 0 else 0)
+
+func _run(routes: bool) -> void:
+	# "0" is the free plane, where bands walk the map (#231: routes are the default)
+	OS.set_environment("SORCMERC_ROUTES", "1" if routes else "0")
+	_mode = "[roads] " if routes else "[free plane] "
 	var main = load("res://scenes/world/world.tscn").instantiate()
 	root.add_child(main)
 	for i in 10:
@@ -122,16 +141,61 @@ func _init() -> void:
 	main.orbit_by(-95.0)
 	main.tilt_by(14.0)
 	main._layout()
-	var target: Vector2 = main._unpix(Vector2(410, 300))
+	check(RouteTravel.on(main.world) == routes, "the map is the kind this pass is for")
+	if routes:
+		_route_clicks(main, p)
+	else:
+		var target: Vector2 = main._unpix(Vector2(410, 300))
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT
+		click.pressed = true
+		click.position = Vector2(410, 300)
+		main._gui_input(click)
+		# World.set_goal() may clamp the order (water, bounds), so this asks that
+		# the goal is the clamp OF the point clicked, not some other point.
+		check(p.goal.distance_to(target) < 1.0 or main.world.is_water(target),
+			"a click on a turned map marches to the ground under the cursor")
+	main.queue_free()
+	await process_frame
+
+func _left_click(main, at: Vector2) -> void:
 	var click := InputEventMouseButton.new()
 	click.button_index = MOUSE_BUTTON_LEFT
 	click.pressed = true
-	click.position = Vector2(410, 300)
+	click.position = at
 	main._gui_input(click)
-	# World.set_goal() may clamp the order (water, bounds), so this asks that
-	# the goal is the clamp OF the point clicked, not some other point.
-	check(p.goal.distance_to(target) < 1.0 or main.world.is_water(target),
-		"a click on a turned map marches to the ground under the cursor")
 
-	print("test_world_camera: %d passed, %d failed" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
+# On the roads: the place under the cursor, found through the turned camera's
+# own _pix, is where the march ends; open ground under the cursor is no order.
+func _route_clicks(main, p) -> void:
+	# A town the company is not standing in, on the screen at this angle.
+	var town = null
+	for s in main.world.settlements:
+		var sp: Vector2 = main._pix(s.position)
+		if s.position.distance_to(p.position) > 60.0 and Rect2(Vector2.ZERO, main.size).grow(-40.0).has_point(sp):
+			town = s
+			break
+	check(town != null, "a town is on the turned screen to click")
+	if town == null:
+		return
+	# A spot of open ground on the screen, well clear of every place a click could name.
+	var ground := Vector2(-1, -1)
+	for y in range(60, int(main.size.y) - 60, 40):
+		for x in range(60, int(main.size.x) - 60, 40):
+			var at: Vector2 = main._unpix(Vector2(x, y))
+			if RouteTravel.place_near(main.world, at, 200.0) == "":
+				ground = Vector2(x, y)
+				break
+		if ground.x >= 0.0:
+			break
+	check(ground.x >= 0.0, "a stretch of open ground is on the turned screen to click")
+	var before: Vector2 = p.position
+	if ground.x >= 0.0:
+		_left_click(main, ground)
+		check(p.at_goal() and p.position == before, "a click on open ground on a turned map gives no order")
+		check(String(main._camp_msg.text).begins_with("No road"), "...and says so: %s" % main._camp_msg.text)
+	_left_click(main, main._pix(town.position))
+	check(not p.at_goal(), "a click on a town on a turned map is an order")
+	check(main._destination(p).distance_to(town.position) < 1.0,
+		"...and the march ends at the town under the cursor, %s (%s)" % [town.sname, main._destination(p)])
+	check(String(main._camp_msg.text).begins_with("On the road to %s" % town.sname), "...said on the HUD: %s" % main._camp_msg.text)

@@ -12,6 +12,13 @@
 # The policy at every meeting is the worst case: every hostile band is
 # fought (POLICY "engage"); a civil one is greeted. Change POLICY to "avoid"
 # for the stealthy player's road.
+#
+# This file walks the free plane (SORCMERC_ROUTES=0, the opt-out), where the
+# bands on the map are what the road meets. Its twin on the roads,
+# tests/test_road_trip_routes.gd, extends it and overrides the hooks below
+# (_routes, _new_crowd, _order, _reachable) — the same legs and the same
+# books, with the road's own dice (core/route_encounters.gd) deciding who is
+# met. The defaults here are the code they replaced, word for word.
 extends SceneTree
 
 const World = preload("res://core/world.gd")
@@ -62,10 +69,34 @@ func _dead(party) -> int:
 			n += 1
 	return n
 
+# --- the steps a route world does differently (tests/test_road_trip_routes.gd) ---
+
+func _routes() -> bool:
+	return false
+
+# The same roads, a different crowd on them each run.
+func _new_crowd(w, run: int) -> void:
+	for q in w.parties.duplicate():
+		for k in WorldBands.KINDS:
+			if String(q.id).begins_with(String(k["id"]) + "-"):
+				w.parties.erase(q)
+				break
+	WorldBands.seed(w, 1000 + run)
+
+# The order to march on town `to`.
+func _order(screen, to) -> void:
+	screen.world.set_goal(screen.world.player(), to.position)
+
+# A town a march from `from` can be ordered to.
+func _reachable(_world, _from: Vector2, _s) -> bool:
+	return true
+
 func _nearest(world, from: Vector2, skip: Array) -> Variant:
 	var best = null
 	for s in world.settlements:
 		if s.id in skip or s.id.begins_with("way-") or WorldAI.is_monster(s.faction):
+			continue
+		if not _reachable(world, from, s):
 			continue
 		if best == null or s.position.distance_to(from) < best.position.distance_to(from):
 			best = s
@@ -123,7 +154,7 @@ func _leg(screen, to) -> Dictionary:
 	var in_fight := false
 	var card_seen := false
 	var ev_seen := false
-	w.set_goal(p, to.position)
+	_order(screen, to)
 	w.clock.resume()
 	screen._pause_btn.text = "Pause"
 	var frames := 0
@@ -166,7 +197,7 @@ func _leg(screen, to) -> Dictionary:
 			w.clock.resume()
 			screen._pause_btn.text = "Pause"
 		if p.at_goal():
-			w.set_goal(p, to.position)   # a bank or a fight stopped it short of the gate
+			_order(screen, to)   # a bank or a fight stopped it short of the gate
 	return {"to": to.sname, "arrived": screen._visit.get("settlement") == to, "frames": frames, "dist": dist,
 		"meets": meets, "fights": fights, "events": events,
 		"hours": (w.clock.elapsed - t0) / 60.0, "hp": _hp_frac(party),
@@ -179,7 +210,8 @@ func _leave_town(screen) -> void:
 		await process_frame
 
 func _init() -> void:
-	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
+	# "0" is the free plane, where bands walk the map (#231: routes are the default)
+	OS.set_environment("SORCMERC_ROUTES", "1" if _routes() else "0")
 	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/%d-%d" % [OS.get_process_id(), randi()])
 	Settings.current().reaction_prompts = false
 	var legs: Array = []
@@ -190,13 +222,7 @@ func _init() -> void:
 		for i in 10:
 			await process_frame
 		var w = screen.world
-		# The same roads, a different crowd on them each run.
-		for q in w.parties.duplicate():
-			for k in WorldBands.KINDS:
-				if String(q.id).begins_with(String(k["id"]) + "-"):
-					w.parties.erase(q)
-					break
-		WorldBands.seed(w, 1000 + run)
+		_new_crowd(w, run)
 		var here = _nearest(w, w.player().position, [])
 		w.player().position = here.position   # the trip starts at a gate, not on a hillside
 		var seen: Array = [here.id]
@@ -238,5 +264,5 @@ func _init() -> void:
 	check(meets / n >= 0.5, "...and is not empty either (%.1f)" % (meets / n))
 	check(float(nobody_dead) / n >= 0.8, "four legs in five, nobody dies on the road (%d/%d)" % [nobody_dead, n])
 	check(float(whole) / n >= 0.6, "three legs in five arrive whole — no dead, half the HP or more (%d/%d)" % [whole, n])
-	print("test_road_trip: %d passed, %d failed" % [_pass, _fail])
+	print("%s: %d passed, %d failed" % ["test_road_trip_routes" if _routes() else "test_road_trip", _pass, _fail])
 	quit(1 if _fail > 0 else 0)

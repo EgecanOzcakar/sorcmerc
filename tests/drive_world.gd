@@ -2,6 +2,9 @@
 # clock runs, a left-click moves the player party, pause stops it, the camera
 # pans/turns/zooms without crashing, and closing on a hostile party hands off to a real
 # scenes/main.tscn fight that freezes the map until it is won.
+# The free plane (SORCMERC_ROUTES=0). The same tour of the roads is
+# tests/drive_world_routes.gd; the off-screen band-on-band battle and the
+# hunting band at 8x stay here, since on the roads no band walks the map.
 #   godot --headless --path . -s tests/drive_world.gd
 extends SceneTree
 

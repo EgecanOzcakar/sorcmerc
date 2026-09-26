@@ -8,47 +8,73 @@
 # party in core/party.gd's overworld_figure gets them that character's
 # figure. Plus the layer's procedural walk (party3d.gd's GAIT_* block):
 # moving bobs, stopping settles.
+#
+# The screen part runs twice, once per kind of map (#231): on the free plane
+# (SORCMERC_ROUTES=0, the opt-out it was written for) and on the roads (the
+# default). The player's figure, its pick and its walk are the same on both.
+# The bands' are not found the same way: on the free plane the map's own
+# patrol and goblins stand on it from the start; on the roads nobody is on the
+# map but the company, and a band is on it only for its meeting — so a patrol
+# and a goblin band are pinned on the road ahead (core/route_pins.gd, the way a
+# story's band stands there) and walked up to by the real click
+# (tests/road_screen.gd), and each must wear its figure while it is met and be
+# gone from the map, figure and all, once the meeting is over.
 #   godot --headless --path . -s tests/test_party3d.gd
 extends SceneTree
 
 const Party3D = preload("res://scenes/world/party3d.gd")
+const World = preload("res://core/world.gd")
+const RouteTravel = preload("res://core/route_travel.gd")
+const RoutePins = preload("res://core/route_pins.gd")
+const WorldAI = preload("res://core/world_ai.gd")
+const RoadScreen = preload("res://tests/road_screen.gd")
 
 var _pass := 0
 var _fail := 0
+var _mode := ""
 
 func check(cond: bool, label: String) -> void:
 	if cond: _pass += 1
-	else: _fail += 1; printerr("  FAIL: ", label)
+	else: _fail += 1; printerr("  FAIL: ", _mode, label)
 
 func _init() -> void:
-	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
-	const World = preload("res://core/world.gd")
 	var p := World.RoamingParty.new("test", Vector2.ZERO, "human")
 	check(p.highest_troop().is_empty(), "no troops, no highest troop")
 	p.troops = [{"role": "heavy", "level": 2}, {"role": "light", "level": 5}, {"role": "spellcaster", "level": 3}]
 	check(String(p.highest_troop().get("role", "")) == "light", "highest_troop picks the max level, not the first")
 	p.troops = [{"role": "heavy", "level": 4}, {"role": "light", "level": 4}]
 	check(String(p.highest_troop().get("role", "")) in ["heavy", "light"], "a tie still returns one of them, not empty")
+	await _run(false)
+	await _run(true)
+	print("test_party3d: %d passed, %d failed" % [_pass, _fail])
+	quit(1 if _fail > 0 else 0)
 
+func _run(routes: bool) -> void:
+	# "0" is the free plane, where bands walk the map (#231: routes are the default)
+	OS.set_environment("SORCMERC_ROUTES", "1" if routes else "0")
+	_mode = "[roads] " if routes else "[free plane] "
 	var main = load("res://scenes/world/world.tscn").instantiate()
 	root.add_child(main)
 	for i in 10:
 		await process_frame
 	check(main._party3d != null, "Party3D is wired into the live scene")
+	check(RouteTravel.on(main.world) == routes, "the map is the kind this pass is for")
 
-	var patrol = null
-	var player = null
-	var goblins = null
-	for party in main.world.parties:
-		if party.id == "patrol": patrol = party
-		if party.is_player: player = party
-		if party.id == "goblins": goblins = party
-	check(patrol != null and main._party3d.has_model(patrol),
-		"patrol (human, heavy troop we generated) gets a figure")
+	var player = main.world.player()
+	if routes:
+		await _met_bands_wear_figures(main)
+	else:
+		var patrol = null
+		var goblins = null
+		for party in main.world.parties:
+			if party.id == "patrol": patrol = party
+			if party.id == "goblins": goblins = party
+		check(patrol != null and main._party3d.has_model(patrol),
+			"patrol (human, heavy troop we generated) gets a figure")
+		check(goblins != null and main._party3d.has_model(goblins),
+			"goblinoid has no race counterpart, but gets the FOE_MODELS figure combat uses")
 	check(player != null and main._party3d.has_model(player),
 		"by default the player wears their highest-level member's figure, not the pawn")
-	check(goblins != null and main._party3d.has_model(goblins),
-		"goblinoid has no race counterpart, but gets the FOE_MODELS figure combat uses")
 	# human_light_idle.glb was never generated (assets/troops/PROVENANCE.md): a
 	# human band led by a light troop wears the human heavy figure, not the pawn.
 	for fac in ["human", "bandit", "soldier"]:
@@ -169,6 +195,30 @@ func _init() -> void:
 			break
 	check(settled, "and settles back to exactly the idle pose, not near it")
 	main.world.clock.resume()
+	main.queue_free()
+	await process_frame
 
-	print("test_party3d: %d passed, %d failed" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
+# The roads: a band is on the map, and wears a figure, only for its meeting.
+func _met_bands_wear_figures(main) -> void:
+	var w = main.world
+	check(w.parties.all(func(q): return q.is_player), "on the roads nobody is on the map but the company")
+	for spec in [["patrol", "human", "patrol (human, heavy troop we generated) gets a figure"],
+			["goblins", "goblinoid", "goblinoid has no race counterpart, but gets the FOE_MODELS figure combat uses"]]:
+		var dest = null
+		for s in w.settlements:
+			if WorldAI.is_monster(s.faction):
+				continue
+			if dest == null or s.position.distance_to(w.player().position) > dest.position.distance_to(w.player().position):
+				dest = s
+		var band = RoadScreen.band(String(spec[0]), String(spec[1]))
+		check(RoadScreen.pin_ahead(main, RoadScreen.node(dest), 60.0, band), "a %s band stands on the road ahead" % spec[1])
+		check(not main._party3d.has_model(band), "...undrawn while it stands pinned there")
+		var got: String = await RoadScreen.go(self, main, dest.position, band, 800)
+		check(got == "card" and main._approach_foe == band, "the march walks up to it (%s)" % got)
+		check(main._party3d.has_model(band), "met on the road: %s" % spec[2])
+		RoadScreen.wave_off(main)
+		await process_frame
+		check(not w.parties.has(band) and not main._party3d.has_model(band), "...and gone from the map, figure and all, when the meeting is over")
+		RoutePins.drop(w, band)
+		if not main._visit.is_empty():
+			main._close_visit()
