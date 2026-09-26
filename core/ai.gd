@@ -639,7 +639,7 @@ static func _party_action(cb, h) -> void:
 # well: a built level-3 sorcerer whose only leveled damage is Burning Hands
 # threw it 48 times in 40 easy fights from arm's length, and 5 times standing
 # back at cantrip range, where its seat's win rate fell 93.0 -> 82.5%
-# (tests/sweep_sorcerer.gd, 200 seeds) until this step was added.
+# (tests/sweep_sorcerer.gd, easy, 200 seeds); with this step it is 95.0%.
 #
 # Otherwise a caster (_keep_range): stands where the spell reaches a foe it can see,
 # as far from the nearest foe as that allows, and never pays an opportunity

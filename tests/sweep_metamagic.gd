@@ -28,6 +28,11 @@
 #           level 10 79.5 / 88.0 / 83.0 (fights 9.5 -> 6.6 rounds)
 #   normal  level 3  64.5 / 69.0 / 69.5    level 5  88.0 / 91.0 / 88.5
 # The price is core/rules/power.gd's quickened_turns.
+#
+# RE-MEASURED 2026-09-25, easy, when casters stopped walking into melee
+# (core/ai.gd _keep_range and _cone_step), off / on priced, master -> branch:
+#   level 3  85.0 / 83.5 -> 92.5 / 93.5    level 5  93.0 / 95.0 -> 97.0 / 96.5
+#   level 10 79.5 / 83.0 -> 86.5 / 88.0
 extends SceneTree
 
 const AI = preload("res://core/ai.gd")
