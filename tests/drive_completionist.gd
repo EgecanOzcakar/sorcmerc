@@ -380,8 +380,15 @@ func _order(at: Vector2) -> void:
 	e.button_index = MOUSE_BUTTON_LEFT
 	e.pressed = true
 	e.position = screen._pix(at)
+	# Since the owner's call of 2026-09-26 the map itself lets a click on a
+	# PLACE win over a band already parted with (world.gd's _place_at), so the
+	# wait is only for a click on open ground, where the band is still what the
+	# click names. Waiting on a town instead stalled the tour whenever such a
+	# band had stopped on it with the clock already running: nothing ever moved
+	# it, and the click was never sent.
 	var band = screen._band_at(e.position)
-	if band != null and (screen._slipped.has(band.id) or WorldAI.in_truce(band, screen.world.clock.elapsed)):
+	if band != null and screen._place_at(e.position) == null \
+			and (screen._slipped.has(band.id) or WorldAI.in_truce(band, screen.world.clock.elapsed)):
 		if screen.world.clock.is_paused():
 			screen._toggle_pause()
 		return
@@ -409,7 +416,10 @@ func _walk_to(at: Vector2, label: String) -> bool:
 		elif p.at_goal() or screen.world.clock.is_paused():
 			_order(at)
 		await _step()
-	fail("could not walk to %s in %d frames" % [label, WALK_LIMIT])
+	var p0 = screen.world.player()
+	fail("could not walk to %s in %d frames (at %s, goal %s, paused %s, halted %s, card %s)" % [
+		label, WALK_LIMIT, p0.position if p0 != null else "-", p0.goal if p0 != null else "-",
+		screen.world.clock.is_paused(), screen._halted_on_arrival, is_instance_valid(screen._approach_card)])
 	return false
 
 # ...and the version for going to a town: it stops the moment the gate opens,
@@ -449,7 +459,12 @@ func _walk_into(s, label: String, stop_on_fight := false) -> bool:
 		elif p.at_goal() or screen.world.clock.is_paused():
 			_order(s.position)
 		await _step()
-	fail("could not walk into %s in %d frames" % [label, WALK_LIMIT])
+	var p0 = screen.world.player()
+	fail("could not walk into %s in %d frames (at %s, goal %s, paused %s, halted %s, visit %s, left %s, card %s)" % [
+		label, WALK_LIMIT, p0.position if p0 != null else "-", p0.goal if p0 != null else "-",
+		screen.world.clock.is_paused(), screen._halted_on_arrival,
+		screen._visit.get("settlement").id if screen._visit.get("settlement") != null else "-",
+		screen._left.id if screen._left != null else "-", is_instance_valid(screen._approach_card)])
 	return false
 
 # --- the hooks a route world tours differently --------------------------------

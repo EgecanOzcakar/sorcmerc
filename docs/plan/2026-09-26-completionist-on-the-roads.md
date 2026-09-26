@@ -46,7 +46,18 @@ the orc gate running a friendly market. `_walk_into` now accepts only the
 gate of the town it is walking to, and walks out of any other; the free
 tour had the same latent trap.
 
-Proof: after the fix, ten route tours and three free tours, all green, 43/43
+**And one the fix uncovered, found in CI.** With `_walk_into` no longer
+counting the wrong town as arrived, the free tour stalled once in CI: "could
+not walk into dun-arrow", then Ashfell. The robot's `_order` still carried
+the workaround from `2026-09-25-completionist-gate-band.md`: when a band
+already parted with stood under the click, it skipped the click and waited
+for the band to move. That wait never ends when the band has stopped on a
+town with the clock already running. The map now lets a click on a place win
+over such a band itself, so the wait is kept only for a click on open ground,
+and a timed-out walk dumps the company's state. Not reproduced locally in 20
+runs; after the change, 8 more of each tour, all green.
+
+Proof: after the `_walk_into` fix, ten route tours and three free tours, all green, 43/43
 REQUIRED each — including `lair:search` and `meet:card` on the roads, the
 two the free tour missed when the default flipped under it.
 
