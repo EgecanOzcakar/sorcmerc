@@ -270,6 +270,10 @@ var routes = null
 # rolls are counted off (one per RouteEncounters.STEP), saved so a reload
 # neither skips a roll nor makes one twice.
 var route_walked := 0.0
+# #234: road events a choice put on the road ahead (core/road_events.gd's
+# "next"), each {event, due}: the first road check after `due` world-minutes
+# fires it before any random pick. Saved, so a chain survives a reload.
+var road_chain: Array[Dictionary] = []
 # #229: band-vs-band battles still being fought. core/world_battle.gd is the
 # only writer — it opens one when two hostile bands meet and closes it when the
 # fight's rounds have run out on the clock; this file only reads the list, to

@@ -1417,6 +1417,30 @@
       "target_region_id",
       "target_settlement_id"
     ],
+    "road_events.effects": [
+      "fight",
+      "gold",
+      "heal",
+      "hurt",
+      "item",
+      "minutes",
+      "next",
+      "opinion",
+      "reveal",
+      "text",
+      "trail",
+      "xp"
+    ],
+    "road_events.needs": [
+      "hurt",
+      "raided",
+      "routes",
+      "settlement"
+    ],
+    "road_events.roles": [
+      "scout",
+      "watch"
+    ],
     "story.beat_kinds": [
       "note",
       "quest",

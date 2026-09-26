@@ -1,0 +1,163 @@
+[
+  {"id": "rough-going", "title": "The going turns bad",
+   "text": "The road gives out into churned mud and deadfall. There is a longer way round on firmer ground, and there is straight through.",
+   "choices": [
+     {"id": "orders", "label": "Let the scout find a line", "orders": true},
+     {"id": "long-way", "label": "Go round by the long way",
+      "then": {"text": "The long way is dry and certain, and it takes exactly as long as it looks.", "minutes": 120}},
+     {"id": "push", "label": "Push straight through", "check": {"skills": ["athletics"], "dc": 14, "role": ""},
+      "pass": {"text": "%s breaks a path and the rest follow in the ruts. They come out the far side ahead of the day.", "minutes": -60},
+      "fail": {"text": "The mud wins. Boots lost, ankles turned, and most of the day with them.", "minutes": 240, "hurt": 0.05}}
+   ]},
+  {"id": "tracks", "title": "Tracks across the road",
+   "text": "Fresh prints cross the road and go off into the scrub — a good many feet, not all of them in boots.",
+   "choices": [
+     {"id": "orders", "label": "Let the scout read them", "orders": true},
+     {"id": "follow", "label": "Follow them", "check": {"skills": ["survival"], "dc": 14, "role": "scout"},
+      "pass": {"text": "%s keeps the trail through the scrub. Smoke, ahead, low down.", "minutes": 60, "next": {"event": "the-camp", "after": 0}},
+      "fail": {"text": "The trail goes to stone and stops. An afternoon spent learning nothing.", "minutes": 120}},
+     {"id": "leave", "label": "Leave them be",
+      "then": {"text": "Whoever it was, they are going somewhere else. The company lets them."}}
+   ]},
+  {"id": "the-camp", "chain": true, "title": "Smoke in a hollow",
+   "text": "A cookfire in a hollow off the trail, and the ones who made the tracks around it. They have not seen the company yet.",
+   "choices": [
+     {"id": "hit", "label": "Go in hard", "then": {"text": "No time to count them. The company goes in.", "fight": {"faction": "road"}}},
+     {"id": "watch", "label": "Watch and count them", "check": {"skills": ["stealth"], "dc": 13, "role": "scout"},
+      "pass": {"text": "%s lies in the bracken until dark and comes back with where they sleep and where they came from.", "reveal": "lair", "xp": 20},
+      "fail": {"text": "A dry stick, a shout, and the hollow empties toward the company.", "fight": {"faction": "road"}}},
+     {"id": "back", "label": "Back away quietly", "then": {"text": "The company goes back the way it came and leaves the fire to them."}}
+   ]},
+  {"id": "wayfarer", "title": "Someone on the road",
+   "text": "A lone traveller, hood up, walking the other way. They slow when they see the company.",
+   "choices": [
+     {"id": "orders", "label": "Pass the time of day", "orders": true},
+     {"id": "guide", "label": "Pay them to show you a way", "cost": {"gold": 20},
+      "then": {"text": "Twenty coins and a scratched map on the back of a bill. There is a way the company did not know.", "trail": {"known": true}}},
+     {"id": "ask", "label": "Ask what lies ahead", "check": {"skills": ["insight", "persuasion"], "dc": 12, "role": ""},
+      "pass": {"text": "%s gets it out of them: a path off the road nobody marks. The company will know it when they pass it.", "trail": {"known": false}},
+      "fail": {"text": "They say the road is the road and keep walking."}}
+   ]},
+  {"id": "cache", "title": "Something half-buried",
+   "text": "The corner of a strongbox shows through the leaf mould under a split oak.",
+   "choices": [
+     {"id": "orders", "label": "Have a quick look", "orders": true},
+     {"id": "dig", "label": "Dig it out properly", "check": {"skills": ["investigation", "athletics"], "dc": 12, "role": ""},
+      "pass": {"text": "%s has it up in an hour. Somebody's savings, and they are not coming back for them.", "gold": [20, 60], "minutes": 60},
+      "fail": {"text": "An hour of digging for a box of rust and wet paper.", "minutes": 60}},
+     {"id": "leave", "label": "Leave it — it is somebody's",
+      "then": {"text": "The company covers it back over. Word of that kind of thing gets round the villages.", "opinion": 2}}
+   ]},
+  {"id": "foul-water", "title": "The stream runs wrong",
+   "text": "The only water for miles has a sheen on it and a smell under that.",
+   "choices": [
+     {"id": "orders", "label": "Let the watch judge it", "orders": true},
+     {"id": "boil", "label": "Boil every drop first",
+      "then": {"text": "Slow, smoky and safe. Nobody gets sick; everybody gets tired of waiting.", "minutes": 60}},
+     {"id": "thirst", "label": "Go thirsty to the next spring", "check": {"skills": ["survival"], "dc": 12, "role": "scout"},
+      "pass": {"text": "%s knows where the next clean spring will be, and it is there.", "minutes": 30},
+      "fail": {"text": "The next spring is further than anyone guessed. They reach it grey and stumbling.", "hurt": 0.08}}
+   ]},
+  {"id": "good-ground", "title": "Clear running",
+   "text": "Firm ground, a dry sky, and a road that goes where it says it does.",
+   "choices": [
+     {"id": "orders", "label": "Make the most of it", "orders": true},
+     {"id": "rest", "label": "Rest the feet an hour",
+      "then": {"text": "An hour in the sun with boots off. It is worth more than the hour.", "minutes": 60, "heal": 0.1}}
+   ]},
+  {"id": "ford", "title": "The ford runs high",
+   "text": "Brown water, running fast and loud, over a ford that was knee-deep the last time anyone crossed it.",
+   "choices": [
+     {"id": "orders", "label": "Let the scout find the bar", "orders": true},
+     {"id": "wait", "label": "Wait for the water to drop",
+      "then": {"text": "By evening it is back to knee-deep. By evening.", "minutes": 180}},
+     {"id": "rope", "label": "Rope everyone across", "check": {"skills": ["athletics"], "dc": 12, "role": ""},
+      "pass": {"text": "%s takes the rope over first and anchors it. Everyone crosses wet and whole."},
+      "fail": {"text": "The rope holds; a pack does not.", "gold": [-30, -10]}}
+   ]},
+  {"id": "toll", "bands": ["heartland", "marches"], "title": "A pole across the road",
+   "text": "Six of them and a pole across the road. They call it a toll. It is not a toll.",
+   "choices": [
+     {"id": "orders", "label": "Talk it up", "orders": true},
+     {"id": "pay", "label": "Pay what they ask", "cost": {"gold": 40},
+      "then": {"text": "The pole goes up. Nobody on either side pretends it was a toll."}},
+     {"id": "clear", "label": "Clear the road",
+      "then": {"text": "The company does not pay people for standing in a road.", "fight": {"faction": "bandit"}}}
+   ]},
+  {"id": "shrine", "needs": "hurt", "title": "A shrine at the crossroads",
+   "text": "A stone niche at the crossroads, old flowers in it, and a bowl for whatever passers-by can spare.",
+   "choices": [
+     {"id": "orders", "label": "Pay it the proper respect", "orders": true},
+     {"id": "offer", "label": "Leave an offering", "cost": {"gold": 10},
+      "then": {"text": "Coin in the bowl and a quiet minute. The company leaves lighter in more ways than one.", "heal": 0.35}},
+     {"id": "pass", "label": "Walk on by", "then": {"text": "The company has somewhere to be."}}
+   ]},
+  {"id": "waystone", "title": "A waystone in the grass",
+   "text": "A standing stone half-sunk in the grass, cut with marks older than any road the company knows.",
+   "choices": [
+     {"id": "orders", "label": "Let the scout make it out", "orders": true},
+     {"id": "copy", "label": "Copy the old marks down", "check": {"skills": ["history", "investigation"], "dc": 14, "role": ""},
+      "pass": {"text": "%s works out what it pointed at: a way the old road took that nobody walks now. It will show itself to anyone who knows to look.", "trail": {"known": false}, "xp": 15},
+      "fail": {"text": "An hour with charcoal and paper, and the marks make no more sense on the page.", "minutes": 60}},
+     {"id": "leave", "label": "Leave it standing", "then": {"text": "It has stood this long without the company's help."}}
+   ]},
+  {"id": "snare", "title": "Wire across the path",
+   "text": "Snare wire at ankle height, across the path and into the brush. Somebody out here is hunting more than deer.",
+   "choices": [
+     {"id": "orders", "label": "Watch where you walk", "orders": true},
+     {"id": "hunt", "label": "Find the trapper", "check": {"skills": ["survival", "perception"], "dc": 14, "role": "scout"},
+      "pass": {"text": "%s follows the wire back to where it is tied off, and the hide beside it.", "next": {"event": "the-trapper", "after": 0}},
+      "fail": {"text": "The wire runs everywhere and nowhere. An hour lost among it.", "minutes": 60}},
+     {"id": "cut", "label": "Cut the wire and move on", "then": {"text": "Whoever set it can set it again somewhere else."}}
+   ]},
+  {"id": "the-trapper", "chain": true, "title": "A hide in the brush",
+   "text": "A hide of woven branches, a man in it with a knife and a great many skins, and very little interest in visitors.",
+   "choices": [
+     {"id": "buy", "label": "Buy what he has", "cost": {"gold": 15},
+      "then": {"text": "He sells a draught he swears by and wants them gone before he changes his mind.", "item": "potions-of-healing"}},
+     {"id": "ask", "label": "Ask him the way", "check": {"skills": ["persuasion", "animalhandling"], "dc": 12, "role": ""},
+      "pass": {"text": "%s talks dogs with him until he talks paths. There is one the company did not know.", "trail": {"known": true}},
+      "fail": {"text": "He points at the road and says nothing else."}},
+     {"id": "warn", "label": "Warn him off this road", "check": {"skills": ["intimidation"], "dc": 13, "role": ""},
+      "pass": {"text": "%s makes it plain. He packs his skins before they are out of sight.", "xp": 15},
+      "fail": {"text": "He is not alone out here, and his friends take it badly.", "fight": {"faction": "bandit"}}}
+   ]},
+  {"id": "wreck", "bands": ["marches", "frontier", "deeps"], "title": "What is left of a company",
+   "text": "A burned wagon, the bones of the team, and what is left of the people who were driving it.",
+   "choices": [
+     {"id": "orders", "label": "Go over it for anything useful", "orders": true},
+     {"id": "bury", "label": "Bury them first",
+      "then": {"text": "Shallow graves and their names where the names could be found. It costs the afternoon.", "minutes": 90, "xp": 20}},
+     {"id": "trail", "label": "Find who did this", "check": {"skills": ["survival", "investigation"], "dc": 15, "role": "scout"},
+      "pass": {"text": "%s finds where they came from and where they went back to.", "reveal": "lair"},
+      "fail": {"text": "The trail finds the company first.", "fight": {"faction": "road"}}}
+   ]},
+  {"id": "storm", "title": "The sky goes the wrong colour",
+   "text": "The light goes green over the hills and the birds stop. Something is coming across the country fast.",
+   "choices": [
+     {"id": "orders", "label": "Let the scout call it", "orders": true},
+     {"id": "shelter", "label": "Dig in where you stand",
+      "then": {"text": "Cloaks over heads in a ditch while it goes over. Wet, cold, and whole.", "minutes": 150}},
+     {"id": "high", "label": "Make for the high ground", "check": {"skills": ["nature", "survival"], "dc": 12, "role": "scout"},
+      "pass": {"text": "%s picks the ridge out of the murk and they are under the overhang before the worst of it.", "minutes": 60},
+      "fail": {"text": "Caught halfway up the slope in the open, and it is every bit as bad as it looked.", "minutes": 180, "hurt": 0.05}}
+   ]},
+  {"id": "carter", "bands": ["heartland", "marches"], "needs": "settlement", "title": "A wheel in the ditch",
+   "text": "A carter with his wheel in the ditch, his team straining, and his load going nowhere.",
+   "choices": [
+     {"id": "orders", "label": "Lend a hand", "orders": true},
+     {"id": "escort", "label": "See him safe into town",
+      "then": {"text": "Slower than the company would walk, but he talks the whole way, and every word of it is about them by the time he gets there.", "minutes": 90, "opinion": 5, "gold": [5, 15]}},
+     {"id": "leave", "label": "Leave him to it", "then": {"text": "Somebody else will be along."}}
+   ]},
+  {"id": "refugees", "bands": ["heartland", "marches"], "needs": "raided", "title": "Families on the road with what they could carry.",
+   "text": "Carts, children, a cow on a rope. They are walking away from something, and they keep looking back.",
+   "choices": [
+     {"id": "orders", "label": "Hear them out", "orders": true},
+     {"id": "share", "label": "Share the company's food",
+      "then": {"text": "It is not much, and it is noticed. Word of it will reach the town they came from.", "opinion": 6, "xp": 15}},
+     {"id": "escort", "label": "Walk them to safety", "check": {"skills": ["survival", "perception"], "dc": 13, "role": "watch"},
+      "pass": {"text": "%s keeps them moving and keeps an eye behind. On the way the grandmother tells them exactly where the raiders came from.", "minutes": 240, "opinion": 10, "reveal": "raiders"},
+      "fail": {"text": "They are followed. Whoever drove them out is not finished with them.", "minutes": 120, "fight": {"faction": "road"}}}
+   ]}
+]

@@ -41,6 +41,7 @@ const Catalog = preload("res://core/rules/catalog.gd")
 const Effects = preload("res://core/rules/effects.gd")
 const PassItems = preload("res://core/rules/pass_items.gd")   # effects/items.json vocabulary
 const Callings = preload("res://core/callings.gd")
+const RoadEvents = preload("res://core/road_events.gd")
 
 const OFFICIAL_ROOT := "res://content"
 const USER_ROOT := "user://mods"
@@ -59,6 +60,7 @@ class Pack extends RefCounted:
 	var _world = null                 # parsed world.json, cached
 	var _story = null                 # core/mod/story.gd, cached
 	var _callings = null              # parsed callings.json, cached
+	var _road_events = null           # parsed road events, cached (#232)
 
 	func id() -> String: return manifest.id
 	func title() -> String: return manifest.title if manifest.title != "" else manifest.id
@@ -246,6 +248,14 @@ static func _validate_content(pack) -> void:
 		pack.errors.append_array(errs)
 		if src != null and errs.is_empty():
 			pack._callings = src
+	if m.has_road_events():
+		# Follow-ups may name a built-in event, so those ids count as known.
+		var src = _json(m.path_of(m.road_events_file), pack.errors)
+		var known: Array = RoadEvents.base().map(func(e): return String(e.get("id", "")))
+		var errs: Array = RoadEvents.validate(src, known, _own_item_ids(m)) if src != null else []
+		pack.errors.append_array(errs)
+		if src != null and errs.is_empty():
+			pack._road_events = src
 	var overlays := {}
 	for target in m.data_files:
 		var src = _json(m.path_of(String(m.data_files[target])), pack.errors)
@@ -429,10 +439,13 @@ static func playable() -> Array:
 static func apply_data() -> void:
 	var layers: Array = []
 	var callings := {}
+	var road: Array = []
 	for pack in live():
 		var m = pack.manifest
 		if pack._callings != null:
 			callings.merge(pack._callings, true)   # scan order: a later pack's background wins
+		if pack._road_events != null:
+			road.append_array(pack._road_events)   # scan order: a later pack's event of the same id wins
 		if m.data_files.is_empty():
 			continue
 		var files := {}
@@ -444,6 +457,7 @@ static func apply_data() -> void:
 			layers.append({"id": m.id, "files": files})
 	Catalog.set_overlays(layers)
 	Callings.set_packs(callings)
+	RoadEvents.set_packs(road)
 	# Pools built from the old bestiary are now wrong: a pack's monsters have to
 	# be able to show up in a roster, and a pack that retuned one has to have
 	# retuned it everywhere.

@@ -31,6 +31,7 @@
 #   "world": "world.json",       // core/mod/world_pack.gd
 #   "story": "story.json",       // core/mod/story.gd
 #   "callings": "callings.json", // core/callings.gd: {background: template}, merged over the built-in
+#   "road_events": "road.json",  // core/road_events.gd: events that ask, added to the road's table
 #   "data": {"bestiary.json": "beasts.json"}   // catalog file <- this pack's file
 # }
 #
@@ -101,6 +102,7 @@ var api := 1
 var world_file := ""          # "" when this pack ships no map
 var story_file := ""          # "" when it tells no story
 var callings_file := ""       # "" when it adds no callings
+var road_events_file := ""    # "" when it adds no road events (#232)
 var data_files := {}          # catalog filename -> this pack's filename
 
 # Where the pack.json was found, without the filename: every path above is
@@ -132,6 +134,9 @@ func has_story() -> bool:
 
 func has_callings() -> bool:
 	return callings_file != ""
+
+func has_road_events() -> bool:
+	return road_events_file != ""
 
 # One line for the browser and for a validation report.
 func describe() -> String:
@@ -193,6 +198,7 @@ static func parse(src, dir_v: String):
 	m.world_file = String(d.get("world", ""))
 	m.story_file = String(d.get("story", ""))
 	m.callings_file = String(d.get("callings", ""))
+	m.road_events_file = String(d.get("road_events", ""))
 	var data = d.get("data", {})
 	if data is Dictionary:
 		for key in data:
@@ -221,6 +227,8 @@ func _declared_files() -> Array[String]:
 		out.append(story_file)
 	if has_callings():
 		out.append(callings_file)
+	if has_road_events():
+		out.append(road_events_file)
 	for target in data_files:
 		out.append(String(data_files[target]))
 	return out

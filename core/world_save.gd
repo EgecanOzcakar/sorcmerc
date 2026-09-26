@@ -257,6 +257,7 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		# the parties' own shape, and when each town next prices one.
 		"pinned": world.pinned.map(_band_dict),
 		"bounty_due": world.bounty_due.duplicate(),
+		"road_chain": world.road_chain.duplicate(true),   # #234: follow-ups on the road ahead
 		"ladder": Ladder.all(),
 		"origin": {"kind": String(world.origin.get("kind", "small")),
 			"seed": int(world.origin.get("seed", 0)),
@@ -310,6 +311,9 @@ static func from_dict(d: Dictionary):
 		world.add_party(_band_from(pd))
 	for pd in d.get("pinned", []):   # #231 phase 2; an old save has none
 		world.pinned.append(_band_from(pd))
+	for c in d.get("road_chain", []):   # #234; an old save has none
+		if c is Dictionary:
+			world.road_chain.append({"event": String(c.get("event", "")), "due": float(c.get("due", 0.0))})
 	for sid in d.get("bounty_due", {}):
 		world.bounty_due[String(sid)] = float(d["bounty_due"][sid])
 	for fd in d.get("fallen", []):   # #142; an old save has none
