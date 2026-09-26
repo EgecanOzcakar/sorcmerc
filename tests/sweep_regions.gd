@@ -28,27 +28,50 @@ const Regions = preload("res://core/regions.gd")
 # level 10 and 12 party one band out in the Unmapped (content 15), a level 15
 # and 20 party one band back in the inner Deeps (content 14), and level 3 at
 # the very edge. `CELLS=p:c,p:c` runs only those.
+#
+# A content of a band's id instead of a level (the Deeps' teeth, 2026-09-25) is
+# that band as the map prices it — Regions.scale_in, so a band's own `under`
+# pin shows — rather than a plain pin at one content level: [10, "unmapped"]
+# is a level 10 party in the Unmapped. Every cell passes the band its content
+# stands in to Scaler.roster_for, which is how the map's road fights reach the
+# Far Deeps' big one (Scaler.BIG_CHANCE); BIG=0 pins that roll off, which
+# builds master's rosters.
 const CELLS := [[3, 3], [5, 5], [6, 6], [8, 8], [10, 10], [12, 12], [15, 15],
 	[6, 3], [10, 3], [3, 6], [3, 10],
-	[10, 15], [12, 15], [15, 14], [20, 14], [3, 15]]
+	[10, 15], [12, 15], [15, 14], [20, 14], [3, 15],
+	[10, "unmapped"], [12, "unmapped"], [14, "unmapped"]]
 
 func _init() -> void:
 	var seeds := int(OS.get_environment("SEEDS")) if OS.get_environment("SEEDS") != "" else 80
-	print("party  content   scale   win   (%d seeds a cell, tier easy)" % seeds)
+	if OS.get_environment("BIG") == "0":
+		Scaler.big_chance_override = 0.0
+	print("party  content   scale   win   (%d seeds a cell, tier easy%s)" % [seeds,
+		", big one off" if Scaler.big_chance_override == 0.0 else ""])
 	var cells: Array = CELLS
 	if OS.get_environment("CELLS") != "":
 		cells = []
 		for pair in OS.get_environment("CELLS").split(","):
 			var pc: PackedStringArray = pair.split(":")
-			cells.append([int(pc[0]), int(pc[1])])
+			cells.append([int(pc[0]), int(pc[1]) if pc[1].is_valid_int() else pc[1]])
 	for cell in cells:
 		var p: int = cell[0]
-		var c: int = cell[1]
-		var scale: float = 1.0 if p == c else Scaler.held_at(Regions.ref_score(c), Regions.ref_score(p))
+		var band: Dictionary = {}
+		var scale := 1.0
+		var c_label := ""
+		if cell[1] is String:
+			band = Regions.band_by_id(String(cell[1]))
+			scale = Regions.scale_in(band, p, Regions.ref_score(p))
+			c_label = String(cell[1]).substr(0, 3)
+		else:
+			var c: int = cell[1]
+			band = _band_holding(c)
+			scale = 1.0 if p == c else Scaler.held_at(Regions.ref_score(c), Regions.ref_score(p))
+			c_label = str(c)
 		var wins := 0
 		for s in range(1, seeds + 1):
 			var chars: Array = Presets.party_at(p)
-			var spec: Dictionary = Scaler.roster_for(chars, "easy", {}, "", s, scale)
+			var spec: Dictionary = Scaler.roster_for(chars, "easy", {}, "", s, scale, [], "", 0,
+				String(band.get("id", "")))
 			spec["seed"] = s
 			var party: Array = []
 			for i in chars.size():
@@ -63,5 +86,14 @@ func _init() -> void:
 				g += 1
 			if cb.outcome() == "Victory":
 				wins += 1
-		print("lvl %-3d lvl %-3d  x%.2f  %5.1f%%" % [p, c, scale, 100.0 * wins / seeds])
+		print("lvl %-3d lvl %-3s  x%.2f  %5.1f%%" % [p, c_label, scale, 100.0 * wins / seeds])
 	quit(0)
+
+# The deepest band whose levels hold content level `c` — where on the map a
+# fight built for that level stands.
+func _band_holding(c: int) -> Dictionary:
+	var out: Dictionary = {}
+	for b in Regions.BANDS:
+		if c >= int(b["levels"][0]) and c <= int(b["levels"][1]):
+			out = b
+	return out

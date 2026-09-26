@@ -146,9 +146,26 @@ func _init() -> void:
 	# and a level 15 one has outgrown the inner Deeps.
 	check(Regions.power_scale(w, Vector2(980, 0), p10) > 1.0,
 		"a level 10 party in the Unmapped is out of its depth (x%.2f)" % Regions.power_scale(w, Vector2(980, 0), p10))
-	check(Regions.level_here(w, Vector2(980, 0), p10) == 15, "...which builds for level 15")
+	# The Unmapped is a wall, not a step (the Deeps' teeth, 2026-09-25): a party
+	# under it meets its `under` level's fight, above its floor, where every
+	# other band pins an under-levelled party to its floor.
+	var unm: Dictionary = Regions.band_by_id("unmapped")
+	var wall: int = Regions.under_level(unm)
+	check(wall > 15 and wall <= 20, "the Unmapped pins a party under it above its floor (%d)" % wall)
+	for id in ["heartland", "marches", "frontier", "deeps"]:
+		var b: Dictionary = Regions.band_by_id(id)
+		check(Regions.under_level(b) == int(b["levels"][0]), "%s pins an under-levelled party to its floor" % id)
+	check(Regions.level_here(w, Vector2(980, 0), p10) == wall, "...so a level 10 party there builds for level %d" % wall)
+	var fresh10: float = Regions.fresh_score(p10)
+	check(is_equal_approx(Regions.power_scale(w, Vector2(980, 0), p10), Scaler.held_at(Regions.ref_score(wall), fresh10)),
+		"...priced as scaler's level-%d fight" % wall)
+	check(Regions.power_scale(w, Vector2(980, 0), p10) > Scaler.held_at(Regions.ref_score(15), fresh10),
+		"...which is steeper than the plain pin at the floor")
+	var p14 := _party_at(14)
+	check(Regions.level_here(w, Vector2(980, 0), p14) == wall, "a level 14 party is under it too")
 	var p15 := _party_at(15)
 	check(Regions.power_scale(w, Vector2(980, 0), p15) == 1.0, "a level 15 party is at home at the edge")
+	check(Regions.level_here(w, Vector2(980, 0), p15) == 15, "...and meets its own level there, not the wall's")
 	check(Regions.level_here(w, Vector2(900, 0), p15) == 14, "...and has outgrown the inner Deeps")
 	# The frontier stops at 9: level 10 has outgrown it, and belongs to the deeps
 	# alone rather than being in band on both sides of that seam.
@@ -224,7 +241,8 @@ func _init() -> void:
 	# The level a fight is built for is the clamp itself, stated plainly.
 	check(Regions.level_here(w, Vector2(100, 0), p10) == 3, "the heartland builds for level 3")
 	check(Regions.level_here(w, Vector2(900, 0), p3) == 10, "the deeps build for level 10")
-	check(Regions.level_here(w, Vector2(980, 0), p3) == 15, "...and the Unmapped for level 15")
+	check(Regions.level_here(w, Vector2(980, 0), p3) == Regions.under_level(Regions.band_by_id("unmapped")),
+		"...and the Unmapped for its wall's level")
 	check(Regions.level_here(w, Vector2(600, 0), p3) == 3, "and the marches for whoever is standing in them")
 
 	# --- the ruler ----------------------------------------------------------
