@@ -227,18 +227,25 @@ static func _best_area(cb, h, v: Dictionary):
 
 # The direction for a cone verb whose wedge catches the most foes net of allies,
 # or ZERO unless some direction nets at least two. The cone half of _best_area,
-# shared by the party autopilot and a foe caster.
-static func _best_cone(cb, h, v: Dictionary) -> Vector2i:
+# shared by the party autopilot and a foe caster. `from` asks it of a hex the
+# caster is not standing on yet (_cone_step); its own hex then counts as an
+# ally's, since it would have left it.
+static func _best_cone(cb, h, v: Dictionary, from = null) -> Vector2i:
+	return _cone_aim(cb, h, v, from)[0]
+
+# [direction, net] for _best_cone.
+static func _cone_aim(cb, h, v: Dictionary, from = null) -> Array:
+	var at: Vector2i = h.pos if from == null else from
 	var best_dir := Vector2i.ZERO
 	var best_net := 1
 	for d in Hex.DIRS:
-		var wedge := Hex.cone(h.pos, d, int(v.get("radius", 2)))
+		var wedge := Hex.cone(at, d, int(v.get("radius", 2)))
 		var f: int = cb.enemies_of(h).filter(func(c): return c.pos in wedge).size()
 		var a: int = cb.allies_of(h).filter(func(c): return c.pos in wedge).size()
 		if f - a > best_net:
 			best_net = f - a
 			best_dir = d
-	return best_dir
+	return [best_dir, best_net]
 
 # --- foes ------------------------------------------------------------
 
@@ -533,7 +540,8 @@ static func _party_action(cb, h) -> void:
 	var bolt := _caster_bolt(cb, h)
 	var reach: Array = foes.filter(func(c): return cb.in_reach(h, c))
 	if not bolt.is_empty() and not moved and not walking:
-		_keep_range(cb, h, int(bolt.get("range", 1)), foes)
+		if not _cone_step(cb, h):
+			_keep_range(cb, h, int(bolt.get("range", 1)), foes)
 		if not h.conscious():
 			return
 		reach = cb.enemies_of(h).filter(func(c): return cb.in_reach(h, c))
@@ -616,16 +624,24 @@ static func _party_action(cb, h) -> void:
 # open, docs/plan/2026-09-25-measured-pass.md).
 #
 # A CASTER, for this purpose, is a hero whose best option this turn is a spell
-# with range: the single-target damage spell the autopilot would throw (the
-# first one on the bar that reaches past arm's length, as it always picked)
-# deals more on average than its whole Attack action does — every swing Extra
-# Attack buys, plus the once-a-turn riders a hit carries (Sneak Attack, a
-# Dreadful Strike), so a rogue or a paladin stays at the front. Averages, not
+# with range: the single-target damage spell it would throw (its hardest-hitting
+# cantrip that reaches past arm's length, _caster_bolt) deals more on average
+# than its whole Attack action does — every swing Extra Attack buys, plus the
+# once-a-turn riders a hit carries (Sneak Attack, a Dreadful Strike), so a
+# rogue or a paladin stays at the front. Averages, not
 # odds: a save-for-nothing Sacred Flame and a to-hit mace are compared as dice.
 # A tie goes to the swing, so a level-3 cleric with a mace fights as before, and
 # the same cleric at level 5, whose cantrip has doubled, stands back.
 #
-# A caster then (_keep_range): stands where the spell reaches a foe it can see,
+# A caster holding a damaging cone with a slot to cast it first looks for a hex
+# this walk reaches, without provoking, from which the cone nets two foes, and
+# stands there (_cone_step). That was the one thing the walk into melee did
+# well: a built level-3 sorcerer whose only leveled damage is Burning Hands
+# threw it 48 times in 40 easy fights from arm's length, and 5 times standing
+# back at cantrip range, where its seat's win rate fell 93.0 -> 82.5%
+# (tests/sweep_sorcerer.gd, 200 seeds) until this step was added.
+#
+# Otherwise a caster (_keep_range): stands where the spell reaches a foe it can see,
 # as far from the nearest foe as that allows, and never pays an opportunity
 # attack to get there. Pinned in a foe's reach it stays and casts — spell
 # attacks carry no penalty for a foe beside you in this engine, so a free swing
@@ -639,17 +655,57 @@ static func _party_action(cb, h) -> void:
 # reaches from where it stands. Misty Step is not spent on it: it would cost a
 # slot and, under the 2024 rule, the turn's leveled spell.
 
-# The spell `h` would throw this turn if it is a caster (above), or {}. Read
-# off every verb it could pay for, not cb.available(): the bar hides a spell
-# with no foe in reach, and a caster out of range is exactly the one that has
-# to know what its range is before it walks.
+# The spell `h` would throw this turn if it is a caster (above), or {}: its
+# hardest-hitting ranged cantrip, or with none the first leveled bolt on the bar
+# (the order the autopilot always threw them in — it spends a slot on one foe
+# only when that is all it has). Read off every verb it could pay for, not
+# cb.available(): the bar hides a spell with no foe in reach, and a caster out
+# of range is exactly the one that has to know its range before it walks.
 static func _caster_bolt(cb, h) -> Dictionary:
+	var best := {}
 	for v in cb.all_verbs(h):
-		if v["kind"] == "spell" and v.get("targeting", "") == "enemy" and v.has("dice_count") \
-				and not v.has("heal_count") and String(v.get("cost", "")) == "action" \
-				and int(v.get("range", 1)) > 1 and _payable(cb, h, v):
-			return v if _avg_dmg(v) > _swing_value(cb, h) + _rider_value(h) else {}
-	return {}
+		if v["kind"] != "spell" or v.get("targeting", "") != "enemy" or not v.has("dice_count") \
+				or v.has("heal_count") or String(v.get("cost", "")) != "action" \
+				or int(v.get("range", 1)) <= 1 or not _payable(cb, h, v):
+			continue
+		var cantrip: bool = int(v.get("slot_level", 0)) <= 0
+		if best.is_empty() and not cantrip:
+			best = v   # a leveled bolt holds the place until a cantrip turns up
+		elif cantrip and (int(best.get("slot_level", 0)) > 0 or best.is_empty() or _avg_dmg(v) > _avg_dmg(best)):
+			best = v
+	if best.is_empty() or _avg_dmg(best) <= _swing_value(cb, h) + _rider_value(h):
+		return {}
+	return best
+
+# A caster holding a damaging cone does what the old walk into melee did best:
+# where a hex this walk reaches, without provoking, would let the cone net two
+# foes or more, it stands there, and _party_action's cone step throws it. True
+# if the cone already nets two from here, or the step was taken; false leaves
+# the move to _keep_range. The most foes netted wins, the move field's own
+# order breaks a tie.
+static func _cone_step(cb, h) -> bool:
+	var cone := _pick(cb, h, func(v): return v.get("targeting", "") == "direction" and v.has("dice_count"))
+	if cone.is_empty():
+		return false
+	if _best_cone(cb, h, cone) != Vector2i.ZERO:
+		return true
+	var radius := int(cone.get("radius", 2))
+	var foes: Array = cb.enemies_of(h)
+	var cands: Array = []   # [net, flood order, hex]
+	var i := 0
+	for x in cb.move_field(h):
+		i += 1
+		if foes.filter(func(c): return Hex.distance(x, c.pos) <= radius).size() < 2:
+			continue   # no wedge from here can hold two
+		var net: int = _cone_aim(cb, h, cone, x)[1]
+		if net > 1:
+			cands.append([net, i, x])
+	cands.sort_custom(func(a, b): return a[0] > b[0] or (a[0] == b[0] and a[1] < b[1]))
+	for c in cands:
+		if cb.provokers_for(h, c[2]).is_empty():
+			cb.move_to(h, c[2])
+			return true
+	return false
 
 # Everything combat._offerable asks of a spell except that a foe be in reach:
 # a button, affordable, its slot payable and allowed this turn.

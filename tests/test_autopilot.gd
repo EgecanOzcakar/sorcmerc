@@ -10,7 +10,8 @@
 # sorcerer arming Metamagic (Quickened for a Fireball, the action still spent
 # as ever; Twinned only for a spell that twins), and a sorcerer with no bow
 # keeping its distance (it casts from range rather than walking up to punch,
-# and steps out of a foe's reach only when the step costs no swing). Then every
+# steps out of a foe's reach only when the step costs no swing, and steps in
+# when a cone would catch two). Then every
 # kit at levels 3 and 8: the fights finish, the same seed plays the same fight,
 # and a kit with a Bonus Action on offer spends it on a fair share of its turns.
 #   godot --headless --path . -s tests/test_autopilot.gd
@@ -49,6 +50,7 @@ func _init() -> void:
 	test_metamagic_armed()
 	test_caster_keeps_its_distance()
 	test_caster_steps_out_when_free()
+	test_caster_steps_in_to_cone()
 	test_every_kit()
 	print("test_autopilot: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -310,6 +312,21 @@ func test_caster_steps_out_when_free() -> void:
 	t = log_since(cb, n0)
 	check(h.pos == at and not t.contains("OA "), "with the goblin's reaction in hand it holds its ground:\n%s" % t)
 	check(t.contains("%s casts" % h.cname) and swings(t, h.cname) == 0, "...and casts from there rather than swings")
+
+# A caster holding Burning Hands keeps what the walk into melee was good for:
+# two goblins side by side a few hexes off, and it steps to where the cone
+# catches both and throws it, rather than standing back with a cantrip.
+func test_caster_steps_in_to_cone() -> void:
+	var h = Adapter.to_combatant(_metamage(["careful", "subtle"], ["burning-hands"]), "party", Vector2i(1, 0))
+	var two := _goblins_at([Vector2i(5, 0), Vector2i(5, 1)])
+	var cb = Combat.new(RNG.new(11), [h] + two, Encounter.board_for("forest-clearing"))
+	cb.begin_turn_for(h)
+	h.pools["sorcerer-innate-sorcery"]["cur"] = 0
+	var n0: int = cb.log.size()
+	AI.take_turn(cb, h)
+	var t := log_since(cb, n0)
+	check(t.contains("casts Burning Hands"), "a cone that would net two from a step away is stepped to and thrown:\n%s" % t)
+	check(not t.contains("OA "), "...and the step costs no opportunity attack")
 
 # Every kit, levels 3 and 8, a normal roster: the fight ends, plays the same
 # twice, and the Bonus Action is spent on a fair share of the turns it is on
