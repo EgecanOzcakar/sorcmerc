@@ -432,8 +432,8 @@ func _ready() -> void:
 			"large": world = _large_world()
 			"procedural": world = ProceduralWorld.build(int(OS.get_environment("SORCMERC_SEED")))
 			_: world = _small_world()
-		# #231 phase 1: a map built while SORCMERC_ROUTES=1 is set is born a
-		# route world — roads only, nobody on the map but the company. Only a map
+		# #231: a new map is born a route world — roads only, nobody on the map
+		# but the company — unless SORCMERC_ROUTES=0 opts it out. Only a map
 		# built here: a resumed save is what it already was (core/route_travel.gd
 		# says why), and a pack's world is adopted where game.gd builds it.
 		if RouteTravel.flag_on():

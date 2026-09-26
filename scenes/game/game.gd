@@ -664,8 +664,8 @@ func _start_pack(party) -> void:
 	WorldSave.new_slot()   # a pack run is a new run: its own slot, same as the rest
 	_enlist(party)
 	var world = Registry.world_of(_pack, int(OS.get_environment("SORCMERC_SEED")))
-	# #231 phase 2: a pack's map built while SORCMERC_ROUTES=1 is set is born a
-	# route world like a built-in one, its authored parties[] pinned to the
+	# #231: a pack's map is born a route world like a built-in one (unless
+	# SORCMERC_ROUTES=0), its authored parties[] pinned to the
 	# roads rather than dropped (core/route_travel.gd).
 	if world != null and RouteTravel.flag_on():
 		RouteTravel.adopt(world, true)

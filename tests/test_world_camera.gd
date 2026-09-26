@@ -28,6 +28,7 @@ func check(cond: bool, label: String) -> void:
 const ANGLES := [[35.0, 22.332], [0.0, 45.0], [115.0, 12.0], [250.0, 82.0], [359.0, 60.0]]
 
 func _init() -> void:
+	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
 	var main = load("res://scenes/world/world.tscn").instantiate()
 	root.add_child(main)
 	for i in 10:
