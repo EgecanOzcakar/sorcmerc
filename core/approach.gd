@@ -40,6 +40,24 @@
 # and world_camp.watch_check, and the standing orders from D3 (core/travel.gd)
 # decide who rolls and at what bonus. Nothing new is invented; it is wiring.
 #
+# #232 (the owner's call, 2026-09-26): a meeting on the road is not only a
+# fight to be had or dodged. Four more ways, beside the ones above:
+#
+#   demand   the other half of a toll: a band the company plainly outclasses
+#            can be made to pay to be let go (Intimidation). Fail and it is the
+#            fight, plainly. Offered only against a band that has troops and
+#            is DEMAND_MARGIN weaker — nobody demands tribute of their betters.
+#   trade    a caravan on the road opens its packs: a few things for sale at a
+#            road's markup, asked on the road event card (core/road_events.gd
+#            — each thing a choice with its price, and "nothing today").
+#   news     a patrol or a caravan tells what it has seen: a way on the map to
+#            a place the company could not reach (a trail, shown at once), or on
+#            a map without roads, the nearest hidden lair.
+#   job      somebody wants a crate run to the next town: a real delivery job
+#            (core/quest_posting.gd's deliver_goods), taken on the spot, paid at
+#            the far gate — and the escort objective it brings to any fight on
+#            the way. One road job at a time from any one town.
+#
 # What this does NOT own: the fight (scenes/main.tscn, unchanged), what a won
 # fight pays (world.gd's _bank), or any drawing. Faction opinion only in the
 # one place a way's own result moves it — a failed parley's PARLEY_REFUSED; a
@@ -96,6 +114,19 @@ const WAYS := {
 		"note": "No fight, and nothing to show for it.",
 		"win": "No fight — and no XP, no loot, nothing.",
 		"lose": "Seen mid-slip: they take the first round, and you fight strung out — get everyone to the road at the far edge, or through them."},
+	"demand": {"label": "Demand tribute", "role": "", "skills": ["intimidation"], "dc": DEMAND_DC,
+		"note": "They are outmatched, and they know it.",
+		"win": "They pay to be let go — about %d ◉ — and there is no fight.",
+		"lose": "They would rather fight than pay: a plain, even fight."},
+	"trade": {"label": "Trade", "role": "", "skills": [], "dc": 0,
+		"note": "See what they are carrying.",
+		"win": "Their packs are opened: a few things for sale, at the road's prices."},
+	"news": {"label": "Ask for news", "role": "", "skills": [], "dc": 0,
+		"note": "What have they seen on the road?",
+		"win": "They tell what they have seen — maybe a way the company does not know."},
+	"job": {"label": "Ask for work", "role": "", "skills": [], "dc": 0,
+		"note": "Anything that wants carrying?",
+		"win": "A crate for %s, paid at the gate: %d ◉."},
 	"parley": {"label": "Parley", "role": "", "skills": ["persuasion", "deception"],
 		"dc": PARLEY_DC, "note": "Buy your way past. They will want something.",
 		"win": "No fight. The toll is %d ◉, and there is no loot.",
@@ -114,8 +145,22 @@ const WAYS := {
 # Order they are offered in: the safe one first, the gamble last, so the list
 # reads as an escalation rather than a menu.
 const ORDER := ["avoid", "parley", "ambush", "engage"]
-# What a non-hostile band offers instead: no gamble, nothing to roll.
-const FRIENDLY_ORDER := ["greet", "pass"]
+# Demand sits after parley when it is offered: the two tolls, side by side.
+const DEMAND_AFTER := "parley"
+# What a non-hostile band offers instead: no gamble, nothing to roll — and,
+# since #232, what they might have to offer (trade and a job need a `world`).
+const FRIENDLY_ORDER := ["greet", "trade", "news", "job", "pass"]
+
+# Demand: how much stronger the company must be (its levels against the band's)
+# before the offer is on the card, the check's DC, and what the band pays, per
+# level of troops. Taste numbers, spike doc §5.
+const DEMAND_DC := 14
+const DEMAND_MARGIN := 1.5
+const TRIBUTE_PER_LEVEL := 6
+# Trade: the markup on the road (a caravan is not a market), and how many
+# things it has — two, and "nothing today", keeps it to a road card's three.
+const CARAVAN_MARKUP := 1.25
+const CARAVAN_WARES := 2
 
 # What talking past a band costs. A share of the purse rather than a flat fee —
 # a toll that is trivial at 500 gold and impossible at 30 is not a decision.
@@ -148,15 +193,24 @@ static func parley_costs_opinion(foe) -> bool:
 # What this party can try against this band, each with the check it would roll
 # and by whom — so the card can show "Vera Kord, Stealth vs DC 13" on the button
 # BEFORE it is pressed. A choice you cannot price is not a choice.
-static func options(party, foe, hostile := true) -> Array:
+static func options(party, foe, hostile := true, world = null) -> Array:
 	var out: Array = []
 	if not hostile:
 		for id in FRIENDLY_ORDER:
+			if not _friendly_offers(id, foe, world, party):
+				continue
 			var w: Dictionary = WAYS[id]
-			out.append({"id": id, "label": String(w["label"]), "note": String(w["note"]),
-				"dc": 0, "win": String(w["win"])})
+			var o := {"id": id, "label": String(w["label"]), "note": String(w["note"]),
+				"dc": 0, "win": String(w["win"])}
+			if id == "job":
+				var q := job_for(foe, world, party)
+				o["win"] = String(w["win"]) % [String(q["dest"]), int(q["quest"]["reward"]["gold"])]
+			out.append(o)
 		return out
-	for id in ORDER:
+	var order: Array = ORDER.duplicate()
+	if can_demand(party, foe):
+		order.insert(order.find(DEMAND_AFTER) + 1, "demand")
+	for id in order:
 		if id == "parley" and not can_parley(foe):
 			continue
 		var w: Dictionary = WAYS[id]
@@ -183,6 +237,8 @@ static func options(party, foe, hostile := true) -> Array:
 				o["toll_item"] = item
 			else:
 				o["win"] = String(w["win_broke"])
+		elif id == "demand":
+			o["win"] = String(w["win"]) % tribute(foe)
 		else:
 			o["win"] = String(w.get("win", ""))
 		if w.has("lose"):
@@ -217,7 +273,7 @@ static func needs(dc: int, bonus: int) -> int:
 # the combat scene, which already knows what to do with them (T39).
 #
 #   {way, ok, fight, scouted_ahead, forced_ambush, text, + the roll, + toll}
-static func resolve(party, foe, way: String, rng = null) -> Dictionary:
+static func resolve(party, foe, way: String, rng = null, world = null) -> Dictionary:
 	if not WAYS.has(way):
 		return {}
 	var w: Dictionary = WAYS[way]
@@ -232,6 +288,10 @@ static func resolve(party, foe, way: String, rng = null) -> Dictionary:
 		out["fight"] = false
 		out["text"] = String(w["win"])
 		return out
+	if way in ["trade", "news", "job"]:
+		out["ok"] = true
+		out["fight"] = false
+		return _friendly(party, foe, way, world, rng if rng != null else RNG.new(), out)
 
 	var who := _roller(party, w)
 	if who.is_empty():
@@ -289,7 +349,132 @@ static func resolve(party, foe, way: String, rng = null) -> Dictionary:
 				# first round: the same surprise a blown ambush hands over.
 				out["forced_ambush"] = true
 				out["text"] = "%s gets nowhere. They were never going to be talked to, and they come in while the company is still talking." % who["cname"]
+		"demand":
+			out["fight"] = not ok
+			out["forced_ambush"] = false
+			if ok:
+				var paid: int = tribute(foe)
+				party.add_gold(paid)
+				out["tribute"] = paid
+				out["text"] = "%s tells them what happens next if they do not pay. They pay, %d ◉ of it, and are gone." % [who["cname"], paid]
+			else:
+				out["text"] = "%s makes the demand. They look at each other, and at the company, and decide to find out." % who["cname"]
 	return out
+
+# --- #232: the ways a meeting can go without a fight -------------------------
+
+# The company's levels against the band's: demand is only on the card against a
+# band that has troops and is DEMAND_MARGIN weaker, and that can be talked to.
+static func can_demand(party, foe) -> bool:
+	if not can_parley(foe) or foe.troops.is_empty():
+		return false
+	var theirs := 0
+	for t in foe.troops:
+		theirs += int(t.get("level", 1))
+	var ours := 0
+	for ch in party.party_characters():
+		if not ch.dead:
+			ours += ch.level()
+	return float(ours) >= float(theirs) * DEMAND_MARGIN
+
+static func tribute(foe) -> int:
+	var lv := 0
+	for t in foe.troops:
+		lv += int(t.get("level", 1))
+	return maxi(TRIBUTE_PER_LEVEL, lv * TRIBUTE_PER_LEVEL)
+
+# Which of the friendly ways this band has to offer. A caravan trades; anybody
+# who walks the roads has news; work needs a town to run it to.
+static func _friendly_offers(id: String, foe, world, party) -> bool:
+	match id:
+		"trade":
+			return world != null and String(foe.ai.get("source", "")) == "caravan"
+		"news":
+			return world != null
+		"job":
+			return world != null and not job_for(foe, world, party).is_empty()
+	return true
+
+# The crate run a band on the road wants done: from the town nearest it to the
+# nearest other civilized town (QuestPosting.deliver_offer), priced as the board
+# prices it. {} when there is no such run, or the company already has it.
+# {quest, dest} otherwise.
+static func job_for(foe, world, party) -> Dictionary:
+	if world == null:
+		return {}
+	var QuestPosting = load("res://core/quest_posting.gd")   # load: it preloads this file's neighbours
+	var Quest = load("res://core/quest.gd")
+	var home = null
+	var best := INF
+	for s in world.settlements:
+		if WorldAI.is_monster(s.faction):
+			continue
+		var d: float = s.position.distance_to(foe.position)
+		if d < best:
+			best = d
+			home = s
+	if home == null:
+		return {}
+	var q: Dictionary = QuestPosting.deliver_offer(home, world)
+	if q.is_empty() or not Quest.get_quest(party, String(q["id"])).is_empty():
+		return {}
+	var dest := ""
+	for s in world.settlements:
+		if s.id == String(q["target_settlement_id"]):
+			dest = s.sname
+	return {"quest": q, "dest": dest}
+
+static func _friendly(party, foe, way: String, world, rng, out: Dictionary) -> Dictionary:
+	match way:
+		"trade":
+			out["wares"] = wares(foe, rng)
+			out["text"] = "They set down their packs and open them."
+		"news":
+			var e := {}
+			# load: core/landmarks.gd preloads this file, and the road's chain
+			# (road_events -> route_travel -> world_routes) preloads landmarks.
+			load("res://core/road_events.gd").apply({"trail": {"known": true}}, party, world, rng, e)
+			if e.has("trail") and String(e["trail"]) != "":
+				out["trail"] = e["trail"]
+				out["text"] = "They have come by a way that is on no map: to %s. They show the company where it leaves the road." % e["trail"]
+			elif e.has("lair"):
+				out["lair"] = e["lair"]
+				out["text"] = "They have seen something moving out past the road: %s. It is on the map now." % e["lair"]
+			else:
+				out["text"] = "Nothing the company does not already know."
+		"job":
+			var j := job_for(foe, world, party)
+			if j.is_empty():
+				out["text"] = "They have nothing that wants carrying."
+			else:
+				var Quest = load("res://core/quest.gd")
+				Quest.accept(party, j["quest"], world.clock.elapsed)
+				out["quest"] = String(j["quest"]["title"])
+				out["text"] = "A crate for %s, and a name to give at the gate. It is in the quest log." % j["dest"]
+	return out
+
+# What a caravan has for sale, as a road event the choice card can ask:
+# CARAVAN_WARES things at the road's markup, and "nothing today". Seeded off
+# the band, so a reload shows the same packs.
+const STOCK := ["potions-of-healing", "dagger", "handaxe", "spear", "shortsword", "light-crossbow",
+	"leather", "studded-leather", "chain-shirt"]
+static func wares(foe, _rng = null) -> Dictionary:
+	var pick := RNG.new(maxi(1, absi(hash("wares|%s" % foe.id))))
+	var pool: Array = STOCK.duplicate()
+	var choices: Array = []
+	for i in CARAVAN_WARES:
+		if pool.is_empty():
+			break
+		var item: String = pool.pop_at(pick.roll_die(pool.size()) - 1)
+		var price: int = maxi(1, int(round(Campaign.item_price(item) * CARAVAN_MARKUP)))
+		choices.append({"id": "buy-%s" % item, "label": "Buy the %s" % Campaign.item_name(item).to_lower(),
+			"cost": {"gold": price},
+			"then": {"text": "Coin changes hands, and the %s changes packs." % Campaign.item_name(item).to_lower(), "item": item}})
+	choices.append({"id": "nothing", "label": "Nothing today",
+		"then": {"text": "The packs are tied up again, and the road goes on."}})
+	return {"id": "caravan-wares", "title": "A caravan's packs",
+		"text": "Bolts of cloth, a keg, and under them the things a road actually wants.",
+		"choices": choices}
 
 
 # A share of what the party is carrying, floored so it is never pocket change.
