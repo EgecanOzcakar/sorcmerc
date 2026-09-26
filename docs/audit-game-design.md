@@ -388,3 +388,4 @@ none is built yet. Each lands as its own piece of work with its own
 **Two follow-ups the owner settled:**
 - **1.6:** Rope Trick does **not** cancel the ambush roll. It only replaces the kit.
 - **1.3 / 3.3:** re-entry **also** prices the reset lair with `Regions.fresh_score`, so a drained party is never met by a smaller lair.
+- **2026-09-25, 1.8 / 3.5:** the victors' truce after a defeat **stays as built**: the band that won holds off the beaten company rather than coming straight back for it. And on a **withdrawal**, a downed hero in a hex **beside a hero who walks off** is carried off with them, alive and stable, one each; the downed with nobody beside them still die as before. (Build log, "Loose ends".)

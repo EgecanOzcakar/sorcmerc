@@ -357,6 +357,19 @@ var explored: Array[Vector2] = []
 # (world-minutes; < 0 = nothing marked). Runtime only — it lapses with the day.
 var marked_until := -1.0
 var marked_at := Vector2.ZERO   # where the watch was kept — band_seen()'s two-radii center
+# Where the company made camp, while it is still standing there (the owner's
+# call, 2026-09-25: who marches changes at a camp, a settlement or the lodge,
+# never on the open road — core/bench.gd's rotation_refusal). Set by
+# core/world_camp.gd on a quiet night; tick() strikes it the moment the player
+# walks more than CAMP_RADIUS off it. Vector2.INF = no camp. Saved, so a
+# company that saves by its fire and loads again is still at it.
+const CAMP_RADIUS := 10.0   # the fire's own ground: a quarter of a minute's walk at SPEED
+var camp_spot := Vector2.INF
+
+func at_camp() -> bool:
+	var p := player()
+	return camp_spot.is_finite() and p != null and p.position.distance_to(camp_spot) <= CAMP_RADIUS
+
 # How strong each band is against the player's party, keyed by band id: the
 # fight it would field, as a fraction of an even one (core/world_flee.gd). The
 # map screen re-gauges it; core/world_ai.gd reads it to decide who runs from
@@ -647,6 +660,8 @@ func tick(delta: float) -> float:
 		# #229: a band in a fight stands its ground until the fight is over.
 		if clashes.is_empty() or clash_of(p).is_empty():
 			move_toward_goal(p, dt)
+	if camp_spot.is_finite() and not at_camp():
+		camp_spot = Vector2.INF   # the company has walked on: the camp is struck
 	return dt
 
 # move_toward never overshoots, so arriving is just position == goal. Long

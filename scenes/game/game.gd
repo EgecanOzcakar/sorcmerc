@@ -528,6 +528,16 @@ func _process(_dt: float) -> void:
 		var saved = WorldSave.from_dict(Coop.link.world_pending)
 		Coop.link.world_pending = {}
 		Coop.split = Coop.link.owners_latest   # the host's choice of who plays whom, so Coop.mine() agrees here
+		# A finished company (core/defeat.gd) ends on this screen too: the host's
+		# _end_company autosaves with party.finished written, and that save is
+		# the one that crosses the wire. The guest reads the same record the
+		# host's closing screen does, instead of a map nobody is left on. The
+		# barracks and the slot are the host's; nothing is written here.
+		if saved != null and not saved["party"].finished.is_empty():
+			_guest_combat = null
+			_guest_on_map = false
+			show_company_end(saved["party"].finished)
+			return
 		if saved != null:
 			var old = _screen if _guest_on_map else null   # keep the guest's own camera across the rebuild
 			_guest_combat = null
@@ -664,8 +674,8 @@ func _start_pack(party) -> void:
 	WorldSave.new_slot()   # a pack run is a new run: its own slot, same as the rest
 	_enlist(party)
 	var world = Registry.world_of(_pack, int(OS.get_environment("SORCMERC_SEED")))
-	# #231 phase 2: a pack's map built while SORCMERC_ROUTES=1 is set is born a
-	# route world like a built-in one, its authored parties[] pinned to the
+	# #231: a pack's map is born a route world like a built-in one (unless
+	# SORCMERC_ROUTES=0), its authored parties[] pinned to the
 	# roads rather than dropped (core/route_travel.gd).
 	if world != null and RouteTravel.flag_on():
 		RouteTravel.adopt(world, true)

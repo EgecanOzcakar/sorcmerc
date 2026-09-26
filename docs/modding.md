@@ -171,7 +171,7 @@ player by its `id`. A story's `spawn_party` takes the same `name`. `ai.behavior`
 | `wander` | `home`: a point or an id · `radius` · `seed` |
 | `idle` | — (stands where it was placed) |
 
-**On a route world** (a map born with `SORCMERC_ROUTES=1`, #231) nothing walks
+**On a route world** (every new map since #231, unless `SORCMERC_ROUTES=0`) nothing walks
 the map, and a pack's parties and a story's `spawn_party` still mean what they
 say: the band stands on the nearest road to where it was put, is not drawn,
 and is met when the company walks past that spot. `ai.behavior` is kept but

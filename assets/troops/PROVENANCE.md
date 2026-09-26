@@ -10,10 +10,11 @@ each with the texture Godot extracted from it on import.
 whose faction maps to a species (`RACE_FOR_FACTION`: human, bandit and soldier to
 human; orc, dwarf, elf to themselves), by the role of the band's highest-levelled
 troop (`RoamingParty.highest_troop()`). A band whose faction maps to no species
-uses its faction figure from `assets/figures/`; a named file that is not on disk
-gives the primitive pawn.
+uses its faction figure from `assets/figures/`. A species with no figure for a role
+wears its heavy troop (`ROLE_STAND_IN`): human has no light troop, so a human,
+bandit or soldier band led by a light troop wears `human_heavy_idle.glb`.
 
-## Twelve slots, eleven files
+## Eleven files
 
 | File | Source | Landed | Notes |
 |---|---|---|---|
@@ -28,13 +29,12 @@ gives the primitive pawn.
 | `orc_light_idle.glb` | generated | 2026-09-13 `29ec58a` | Community search found nothing suitable first |
 | `orc_spellcaster_idle.glb` | generated | 2026-09-13 `29ec58a` | Community search found nothing suitable first |
 | `orc_heavy_idle.glb` | **Meshy Community feed, CC0** | 2026-09-13 `665db95` | see below |
-| `human_light_idle.glb` | **missing** | — | never generated (see below) |
 
-**`human_light_idle.glb` does not exist.** The first batch ran out of Meshy credits
-after eight of twelve; the orc three were filled in on 2026-09-13 and this one never
-was. `party3d.gd` (`MODELS["human"]["light"]`) still names it, so a human, bandit or
-soldier band led by a light troop finds no file and marches as the pawn. Generate it
-with the same chain, or drop the entry.
+The first batch ran out of Meshy credits after eight of twelve; the orc three were
+filled in on 2026-09-13 and a human light troop never was. `party3d.gd` named the
+missing file until 2026-09-25, when the entry was dropped for the heavy stand-in
+above (build log, "Loose ends"). A human light troop generated with the same chain
+would go back into `MODELS["human"]` with its own row here.
 
 ## The generated ten
 

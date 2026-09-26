@@ -56,9 +56,23 @@ var _selected := ""                       # roster id armed for a slot click
 #
 # What the lock covers is recruiting and benching. Marching ORDER, the standing
 # orders and the map figure stay live everywhere: deciding who walks first is a
-# travel decision, and travel is what you are doing out there.
+# travel decision, and travel is what you are doing out there. Benching —
+# who marches at all — has its own lock since 2026-09-25 (rotation_note below),
+# because a camp opens it and does not open recruiting.
 var roster_locked := false
 var locked_note := "Benching and recruiting happen at an inn."
+# Who marches — Bench, To party, a swap off the bench — is its own lock since
+# the owner's call of 2026-09-25: it opens at a camp as well as an inn, and
+# recruiting does not. The opener passes core/bench.gd's rotation_refusal:
+# "" opens it, a line shuts it and is what the greyed buttons say. Left null
+# (the pre-run screens, the linear campaign, anything that says nothing) it
+# follows roster_locked, as it always did.
+var rotation_note = null
+
+func rotation_refusal() -> String:
+	if rotation_note != null:
+		return String(rotation_note)
+	return locked_note if roster_locked else ""
 const HIRED_NOTE := "The rest of the company is hired at an inn."
 
 # Whoever opens this screen as an overlay names the way out and it is drawn
@@ -505,8 +519,10 @@ func _refresh() -> void:
 		_create_btn.tooltip_text = locked_note if roster_locked else (HIRED_NOTE if founded else "")
 	if Recruits.hire_only(party) and party.roster.is_empty():
 		_hint.text = "Make the one who founds the company. Everyone after them is hired at an inn once you are on the road."
+	elif rotation_refusal() != "":
+		_hint.text = "%s  Marching order, standing orders and the map figure still change here." % rotation_refusal()
 	elif roster_locked:
-		_hint.text = "%s  Marching order, standing orders and the map figure still change here." % locked_note
+		_hint.text = "%s  Who marches can change here: click anyone marching to bench them, or pick up a roster member and click a slot." % locked_note
 	elif _selected == "":
 		_hint.text = "Click anyone marching to bench them.  Or pick up a roster member, then click a slot to place or swap them."
 	else:
@@ -589,10 +605,11 @@ func _card(sm: Dictionary) -> Control:
 	var bench := Button.new()
 	Icons.clicks(bench)
 	bench.text = "Bench" if sm["active"] else "To party"
-	bench.disabled = roster_locked \
+	var shut := rotation_refusal()
+	bench.disabled = shut != "" \
 		or (not sm["active"] and party.active.size() >= Party.MAX_ACTIVE)
-	if roster_locked:
-		bench.tooltip_text = locked_note
+	if shut != "":
+		bench.tooltip_text = shut
 	elif not sm["active"] and not bench.disabled:
 		bench.theme_type_variation = "Primary"
 	if sm.get("dead", false):   # #109: say so, and say what brings them back
@@ -600,7 +617,7 @@ func _card(sm: Dictionary) -> Control:
 		bench.disabled = true
 		bench.tooltip_text = "Dead. A settlement healer raises them for %d ◉ (%d ◉ a level); so does a Revivify caster with a 3rd-level slot, or a Scroll of Resurrection, at the same price." % [Party.revive_cost(party.get_member(sm["id"])), Party.REVIVE_PER_LEVEL]
 	bench.pressed.connect(func():
-		if roster_locked:
+		if rotation_refusal() != "":
 			return
 		if sm["active"]: party.bench(sm["id"])
 		else: party.activate(sm["id"])
@@ -714,8 +731,8 @@ func _slot(index: int, sm: Dictionary) -> Control:
 		b.custom_minimum_size.y = maxf(SLOT_MIN_H,
 			sum.get_combined_minimum_size().y + SLOT_PAD_H)
 		# What this click does depends on whether you are carrying somebody.
-		b.tooltip_text = ("Click to bench %s" % sm["name"]) if not roster_locked \
-			else locked_note
+		b.tooltip_text = ("Click to bench %s" % sm["name"]) if rotation_refusal() == "" \
+			else rotation_refusal()
 	b.pressed.connect(func(): _on_slot(index))
 	return b
 
@@ -847,8 +864,9 @@ func _on_slot(index: int) -> void:
 	# had a Bench button; the side of the screen you are actually looking at
 	# when you decide somebody should sit this one out did not, so the only
 	# way to do it was to go and find their row again on the left.
+	var shut := rotation_refusal() != ""
 	if _selected == "":
-		if roster_locked or index >= party.active.size():
+		if shut or index >= party.active.size():
 			return
 		party.bench(party.active[index])
 		_refresh()
@@ -860,11 +878,11 @@ func _on_slot(index: int) -> void:
 			var other: String = party.active[index]
 			party.active[index] = _selected
 			party.active[i] = other
-		elif roster_locked:
-			return   # swapping somebody off the bench in is recruiting, not marching order
+		elif shut:
+			return   # swapping somebody off the bench in is rotation, not marching order
 		else:
 			party.swap(party.active[index], _selected)
-	elif roster_locked:
+	elif shut:
 		return
 	else:
 		party.activate(_selected)

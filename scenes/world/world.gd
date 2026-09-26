@@ -432,8 +432,8 @@ func _ready() -> void:
 			"large": world = _large_world()
 			"procedural": world = ProceduralWorld.build(int(OS.get_environment("SORCMERC_SEED")))
 			_: world = _small_world()
-		# #231 phase 1: a map built while SORCMERC_ROUTES=1 is set is born a
-		# route world — roads only, nobody on the map but the company. Only a map
+		# #231: a new map is born a route world — roads only, nobody on the map
+		# but the company — unless SORCMERC_ROUTES=0 opts it out. Only a map
 		# built here: a resumed save is what it already was (core/route_travel.gd
 		# says why), and a pack's world is adopted where game.gd builds it.
 		if RouteTravel.flag_on():
@@ -1179,13 +1179,20 @@ func _build_menu_panel() -> void:
 
 const PARTY_SCENE := "res://scenes/party/party.tscn"
 
-# Issue #27: `at_inn` is what unlocks benching and recruiting. The HUD button
-# opens this out in open country, where a party does not reshuffle itself, so
-# it opens locked; the inn's own entrance (_build_inn_page) opens it unlocked.
+# Issue #27: `at_inn` is what unlocks recruiting. The HUD button opens this out
+# in open country, where a company does not take on strangers, so it opens
+# locked; the inn's own entrance (_build_inn_page) opens it unlocked.
+# Who marches is core/bench.gd's rotation_refusal (the owner's call,
+# 2026-09-25): open at the inn, at the lodge's own door (`at_lodge`) and from
+# the HUD while the company stands at a camp it made; shut on the open road,
+# with the refusal on the greyed buttons. A co-op guest never opens it at all:
+# the guest's company is a mirror of the host's, and nothing it changed would
+# reach the host (the refusal says so too, if a door is ever added).
 # Everything else on the screen — marching order, standing orders, the map
 # figure, reading a character's gear and skills — works either way.
-func _open_party(at_inn := false) -> void:
-	if _combat != null or _party_overlay != null or (not at_inn and not _visit.is_empty()):
+func _open_party(at_inn := false, at_lodge := false) -> void:
+	if _combat != null or _party_overlay != null or spectator \
+			or (not at_inn and not at_lodge and not _visit.is_empty()):
 		return
 	world.clock.pause()
 	var overlay := Control.new()
@@ -1195,8 +1202,9 @@ func _open_party(at_inn := false) -> void:
 	var screen = load(PARTY_SCENE).instantiate()
 	screen.party = party
 	screen.roster_locked = not at_inn
-	screen.locked_note = "Benching and recruiting happen at an inn — find one and ask at the counter."
-	screen.exit_label = "←  Back to the inn" if at_inn else "←  Back to the map"
+	screen.locked_note = "Recruiting happens at an inn — find one and ask at the counter."
+	screen.rotation_note = Bench.rotation_refusal(world, at_inn or at_lodge, spectator)
+	screen.exit_label = "←  Back to the inn" if at_inn else ("←  Back to the lodge" if at_lodge else "←  Back to the map")
 	screen.exit_requested.connect(_close_party)
 	overlay.add_child(screen)
 
@@ -5263,6 +5271,13 @@ func _build_lodge_page(box: VBoxContainer, s) -> void:
 	box.add_child(rest_btn)
 	if wait > 0.0:
 		_note(box, "They rested less than a day ago — another night does nothing for %s." % _hours(wait))
+	# The owner's call (2026-09-25): the lodge is one of the places the company
+	# changes who marches (core/bench.gd's rotation_refusal). Hiring stays the
+	# inn's, so this door opens the swap and not the recruiting.
+	var marching := Button.new()
+	marching.text = "Settle who marches (bench, marching order)"
+	marching.pressed.connect(func(): _open_party(false, true))
+	box.add_child(marching)
 	var scroll := _scroll_column(Vector2(VISIT_PANEL_W, _visit_list_h))   # pinned, as the inn's is (#228)
 	box.add_child(scroll)
 	_visit_list = scroll

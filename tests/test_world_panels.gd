@@ -14,6 +14,7 @@ extends SceneTree
 const Quest = preload("res://core/quest.gd")
 const RNG = preload("res://core/rng.gd")
 const Leveling = preload("res://core/leveling.gd")   # #118: the level-up announcement
+const Bench = preload("res://core/bench.gd")   # the owner's call of 2026-09-25: where who marches may change
 
 var _pass := 0
 var _fail := 0
@@ -68,6 +69,7 @@ func panels(node: Node) -> Array:
 	return out
 
 func _init() -> void:
+	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
 	var main = load("res://scenes/world/world.tscn").instantiate()
 	root.add_child(main)
 	for i in 10:
@@ -199,8 +201,66 @@ func _init() -> void:
 	var on_road = main._party_overlay.get_child(0)
 	check(on_road.roster_locked, "...locked, because a field is not an inn")
 	check("inn" in String(on_road.locked_note), "...and it says where to go instead")
+	# The owner's call (2026-09-25; core/bench.gd's rotation_refusal): who
+	# marches does not change on the open road either — the refusal is on the
+	# greyed buttons and the hint, and a slot click is not a way round it.
+	var road_no := String(Bench.ROAD_TEXT)
+	check(on_road.rotation_refusal() == road_no, "on the road the swap is refused: %s" % on_road.rotation_refusal())
+	var bench_btn: Button = null
+	var to_party: Button = null
+	for b in buttons(on_road._roster_col):
+		if b.text == "Bench" and bench_btn == null: bench_btn = b
+		if b.text == "To party" and to_party == null: to_party = b
+	check(bench_btn != null and bench_btn.disabled and bench_btn.tooltip_text == road_no,
+		"...Bench is greyed and says why")
+	check(on_road._hint.text.contains(road_no), "...and so does the screen's hint")
+	var marching_before: Array = main.party.active.duplicate()
+	on_road._selected = ""
+	on_road._on_slot(0)
+	var off_bench := ""
+	for ch in main.party.roster:
+		if not main.party.is_active(ch.id) and not ch.dead:
+			off_bench = ch.id
+	if off_bench != "":
+		on_road._selected = off_bench
+		on_road._on_slot(0)
+	check(main.party.active == marching_before, "...and no slot click benches or swaps anybody on the road")
 	main._close_party()
 	await process_frame
+
+	# At a camp the company made and still stands at, the HUD's screen opens
+	# the swap — and only the swap: recruiting is still the inn's.
+	main.world.camp_spot = main.world.player().position
+	main._open_party()
+	for i in 3:
+		await process_frame
+	var at_camp = main._party_overlay.get_child(0)
+	check(at_camp.rotation_refusal() == "" and at_camp.roster_locked, "at the camp the swap opens and recruiting stays locked")
+	var camp_bench: Button = null
+	for b in buttons(at_camp._roster_col):
+		if b.text == "Bench" and camp_bench == null: camp_bench = b
+	check(camp_bench != null and not camp_bench.disabled, "...Bench is live")
+	var n_active: int = main.party.active.size()
+	camp_bench.pressed.emit()
+	await process_frame
+	check(main.party.active.size() == n_active - 1, "...and benches somebody")
+	var dismiss_btn: Button = null
+	for b in buttons(at_camp._roster_col):
+		if b.text == "Dismiss" and dismiss_btn == null: dismiss_btn = b
+	check(dismiss_btn != null and dismiss_btn.disabled, "...but dismissing is still the inn's")
+	main._close_party()
+	await process_frame
+	main.world.camp_spot = Vector2.INF
+	for id in marching_before:
+		if not main.party.is_active(id):
+			main.party.activate(id)
+
+	# A co-op guest's map never opens the party screen at all.
+	main.spectator = true
+	main._open_party()
+	await process_frame
+	check(main._party_overlay == null, "a co-op guest's map does not open the party screen")
+	main.spectator = false
 
 	await _level_up_announcement(main)
 	print("test_world_panels: %d passed, %d failed" % [_pass, _fail])

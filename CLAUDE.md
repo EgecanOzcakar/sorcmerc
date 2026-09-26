@@ -35,7 +35,7 @@ godot --path . -s tests/shot_world.gd               # overworld     -> world_scr
 godot --headless --path . -s tests/shot_screens.gd  # every menu    -> shots_tmp/ (SHOT_ONLY=party for one)
 ```
 
-Env vars: `SORCMERC_SEED` replays an exact fight/route, `SORCMERC_FAST` zeroes UI tweens and skips cosmetic systems, `SORCMERC_MODS_DIR` relocates community packs, `SORCMERC_UNLOCK_DLC=1` owns every paid pack, `SORCMERC_LINEAR_CAMPAIGN=1` restores the old node-route campaign, `SORCMERC_ROUTES=1` builds a new map as a route world (roads only, no bands on the map; named bands pinned to roads — #231 phases 1–2, `core/route_travel.gd`, `core/route_pins.gd`), `SORCMERC_DEBUG=1` shows the title screen's "Random battle (debug)" button.
+Env vars: `SORCMERC_SEED` replays an exact fight/route, `SORCMERC_FAST` zeroes UI tweens and skips cosmetic systems, `SORCMERC_MODS_DIR` relocates community packs, `SORCMERC_UNLOCK_DLC=1` owns every paid pack, `SORCMERC_LINEAR_CAMPAIGN=1` restores the old node-route campaign, `SORCMERC_ROUTES=0` builds a new map as the old free plane (bands walk the map) instead of the default route world (roads only, named bands pinned to roads — #231, `core/route_travel.gd`, `core/route_pins.gd`); world-screen tests written for the free plane set it, `SORCMERC_DEBUG=1` shows the title screen's "Random battle (debug)" button.
 
 One-time: `git config core.hooksPath .githooks` so changed assets are re-imported after a pull or branch switch.
 
@@ -55,7 +55,7 @@ Tests are plain `extends SceneTree` scripts with their own `_pass`/`_fail` count
 
 **Encounter difficulty is composed from independent multipliers, each answering a different question.** `Scaler.roster_for()` owns the power budget and its curve; callers pass a `power_scale` that multiplies together `WorldThreat.assess(party)` (how beaten-up the party is — can only scale *down*) and `Regions.power_scale(world, pos, party)` (which of the four concentric countries this is, which clamps the level a fight is built for). See `scenes/world/world.gd`'s `encounter_spec()` for the composition, and `core/regions.gd`'s header for why the bands exist at all. Don't collapse these into one knob.
 
-**A board theme picks both the terrain and the roster.** `Encounter.THEMES` names the hex boards; `Scaler.THEME_FACTION` maps a theme to the faction that fights on it and `THEME_HABITAT` filters the bestiary by habitat. `data/bestiary.json`'s 316 entries are hand-tagged with `faction` and `habitat`, and `Encounter._grow()` grows every authored room into its own seeded lumpy shape at fight time.
+**A board theme picks both the terrain and the roster.** `Encounter.THEMES` names the hex boards; `Scaler.THEME_FACTION` maps a theme to the faction that fights on it and `THEME_HABITAT` filters the bestiary by habitat. `data/bestiary.json`'s 342 entries are hand-tagged with `faction` and `habitat`, and `Encounter._grow()` grows every authored room into its own seeded lumpy shape at fight time.
 
 **The overworld is one model plus a file per mechanism.** `core/world.gd` holds the clock, settlements, lairs, landmarks, roaming parties, the water blobs that are the map's only terrain, and the fog. Each `core/world_*.gd` sibling owns exactly one thing (lairs, band spawning, threat, camping, foraging, pathing, off-screen battles, saving) and says in its header what it does *not* own. `scenes/world/world.gd` owns the screen; `scenes/world/world_view3d.gd` owns the 3D scene it draws into.
 
