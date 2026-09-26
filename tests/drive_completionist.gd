@@ -158,12 +158,18 @@ var _frames := 0
 var _region0 := ""          # the country the tour started in; a crossing is a different one
 
 func _init() -> void:
-	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
+	# Which map the tour is of: this file tours the free plane, where bands walk
+	# the map (SORCMERC_ROUTES=0); tests/drive_completionist_routes.gd extends
+	# it and tours the default route world through the hooks marked below.
+	OS.set_environment("SORCMERC_ROUTES", "1" if _routes() else "0")
 	# This process's own autosave slots, so a concurrent godot run cannot clobber
 	# them — same shape as every other driver here.
 	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/%d-%d" % [OS.get_process_id(), randi()])
 	OS.set_environment("SORCMERC_FAST", "1")
 	_run()
+
+func _routes() -> bool:
+	return false
 
 func fail(msg: String) -> void:
 	_fail += 1
@@ -417,12 +423,17 @@ func _walk_into(s, label: String, stop_on_fight := false) -> bool:
 	var here = screen.world.player()
 	if screen._visit.is_empty() and here != null \
 			and here.position.distance_to(s.position) <= screen.VISIT_RADIUS:
-		if not await _walk_to(s.position + Vector2(screen.VISIT_RADIUS + 90.0, 0),
-				"clear of " + label):
+		if not await _step_out_of(s, label):
 			return false
 	for i in WALK_LIMIT:
+		# Only this town's gate is the answer. The march can stop inside
+		# another town's walls on the way — a fight on the road through it ends
+		# with the company halted there, and a halted company has arrived — and
+		# that town opening is the map working; it is walked out of again.
 		if not screen._visit.is_empty():
-			return true
+			if screen._visit.get("settlement") == s:
+				return true
+			screen._close_visit()
 		var p = screen.world.player()
 		if p == null:
 			fail("no player party while walking into %s" % label)
@@ -440,6 +451,37 @@ func _walk_into(s, label: String, stop_on_fight := false) -> bool:
 		await _step()
 	fail("could not walk into %s in %d frames" % [label, WALK_LIMIT])
 	return false
+
+# --- the hooks a route world tours differently --------------------------------
+#
+# Everything the free plane does by walking to a bare point on the map. On the
+# roads there is no bare point to walk to (the company never leaves the road),
+# so tests/drive_completionist_routes.gd overrides exactly these.
+
+# Out of a town's gate, far enough that walking back in opens it again.
+func _step_out_of(s, label: String) -> bool:
+	return await _walk_to(s.position + Vector2(screen.VISIT_RADIUS + 90.0, 0), "clear of " + label)
+
+# Somewhere away from every settlement, to rest or to be met.
+func _into_the_open(at: Vector2) -> bool:
+	return await _walk_to(at, "open country")
+
+# A band put in the party's way for one of the four meetings.
+func _band_in_the_way(way: String):
+	var p = screen.world.player()
+	var band = screen.world.add_party(World.RoamingParty.new(
+		"tourband-%s" % way, p.position + Vector2(30, 0), "goblinoid"))
+	var roster: Array[Dictionary] = [{"role": "light", "level": 1}, {"role": "heavy", "level": 1}]
+	band.troops = roster
+	WorldAI.hunt(band)
+	return band
+
+# Keep moving so the band closes (one frame's order).
+func _close_in(p, band) -> void:
+	_order(p.position + Vector2(-140, 40))
+
+func _band_gone(band) -> void:
+	screen.world.parties.erase(band)
 
 func _settlement(sname: String):
 	for s in screen.world.settlements:
@@ -901,7 +943,7 @@ func _service_name(service: String) -> String:
 func _the_road() -> void:
 	# Out of the gate first: a rest inside the walls is the inn's business.
 	var here: Vector2 = screen.world.player().position
-	await _walk_to(here + Vector2(260, -160), "open country")
+	await _into_the_open(here + Vector2(260, -160))
 	await _step(4)
 
 	var clock0: float = screen.world.clock.elapsed
@@ -963,32 +1005,7 @@ func _the_lair() -> void:
 	# walk a road event lands in follows the clock, which follows how long the
 	# fights before it took: it showed up once the party autopilot started
 	# spending its whole turn and those fights got shorter.
-	var named_first := 0
-	for _try in SEARCH_TRIES:
-		var hidden = _nearest_hidden_lair()
-		if hidden == null:
-			fail("lair:search — every lair on the %s map was already on it" % MAP)
-			break
-		if not await _walk_to(hidden.position, hidden.id):
-			break
-		await _step(4)
-		if hidden.discovered:
-			named_first += 1
-			print("  lair:search — %s was put on the map on the way there; trying the next hidden lair" % hidden.id)
-			continue
-		if screen._lair_btn == null or not screen._lair_btn.visible:
-			fail("lair:search — standing on %s offers no lair button" % hidden.id)
-			break
-		screen._lair_msg.text = ""
-		screen._lair_btn.pressed.emit()
-		await _step(2)
-		# Whether the roll lands is the dice's business. That the button
-		# rolls at all, and says what it rolled, is this file's.
-		check("lair:search", "Survival" in screen._lair_msg.text,
-			"searching %s said '%s'" % [hidden.id, screen._lair_msg.text])
-		break
-	if named_first == SEARCH_TRIES:
-		fail("lair:search — each of %d hidden lairs was put on the map by something else before the party reached it" % SEARCH_TRIES)
+	await _search_for_lair()
 
 	var known = _nearest_known_lair()
 	if not check("lair:found", known != null,
@@ -1018,6 +1035,35 @@ func _the_lair() -> void:
 		await _see_the_fight_out()
 	check("lair:enter", _ledger.has("lair:sneak") or _ledger.has("lair:delve") or known.looted,
 		"neither door into %s opened" % which)
+
+# The Survival check in the field — on the free plane, standing on a hidden lair.
+func _search_for_lair() -> void:
+	var named_first := 0
+	for _try in SEARCH_TRIES:
+		var hidden = _nearest_hidden_lair()
+		if hidden == null:
+			fail("lair:search — every lair on the %s map was already on it" % MAP)
+			break
+		if not await _walk_to(hidden.position, hidden.id):
+			break
+		await _step(4)
+		if hidden.discovered:
+			named_first += 1
+			print("  lair:search — %s was put on the map on the way there; trying the next hidden lair" % hidden.id)
+			continue
+		if screen._lair_btn == null or not screen._lair_btn.visible:
+			fail("lair:search — standing on %s offers no lair button" % hidden.id)
+			break
+		screen._lair_msg.text = ""
+		screen._lair_btn.pressed.emit()
+		await _step(2)
+		# Whether the roll lands is the dice's business. That the button
+		# rolls at all, and says what it rolled, is this file's.
+		check("lair:search", "Survival" in screen._lair_msg.text,
+			"searching %s said '%s'" % [hidden.id, screen._lair_msg.text])
+		break
+	if named_first == SEARCH_TRIES:
+		fail("lair:search — each of %d hidden lairs was put on the map by something else before the party reached it" % SEARCH_TRIES)
 
 func _nearest_hidden_lair():
 	return _nearest_lair(func(l): return not l.discovered and not l.looted)
@@ -1083,7 +1129,7 @@ func _the_meetings() -> void:
 	# Out of everyone's way first: a band closing on the party at a town gate
 	# means the market opens on top of the card, and a chapter that wanders into
 	# a settlement leaves one open behind it.
-	await _walk_to(_open_country(), "open country")
+	await _into_the_open(_open_country())
 	for way in WAYS:
 		if _ledger.has("meet:" + way):
 			continue
@@ -1092,17 +1138,13 @@ func _the_meetings() -> void:
 		# ways. A band is put on the road in front of the party, which is what
 		# the map does by itself, just not four times inside one tour.
 		var p = screen.world.player()
-		var band = screen.world.add_party(World.RoamingParty.new(
-			"tourband-%s" % way, p.position + Vector2(30, 0), "goblinoid"))
-		var roster: Array[Dictionary] = [{"role": "light", "level": 1}, {"role": "heavy", "level": 1}]
-		band.troops = roster
-		WorldAI.hunt(band)
+		var band = _band_in_the_way(way)
 		screen._halted_on_arrival = false
 		screen.world.clock.resume()
 		var waited := 0
 		while not is_instance_valid(screen._approach_card) and waited < 400:
 			waited += 1
-			_order(p.position + Vector2(-140, 40))       # walk, so the band closes
+			_close_in(p, band)                            # walk, so the band closes
 			await _step()
 			if screen._combat != null:                    # met without being asked
 				await _see_the_fight_out()
@@ -1116,7 +1158,7 @@ func _the_meetings() -> void:
 				await _step(2)
 			if screen._combat != null:
 				await _see_the_fight_out()
-		screen.world.parties.erase(band)
+		_band_gone(band)
 	if not _ledger.has("meet:card"):
 		fail("meet:card — no band ever asked how the party wanted to meet it")
 	_daylight()
@@ -1199,7 +1241,7 @@ func _the_rest_of_the_map() -> void:
 		screen._close_visit()
 		await _step(2)
 		# Out of range, so the gate does not swallow the next march order.
-		await _walk_to(s.position + Vector2(screen.VISIT_RADIUS + 90.0, 0), "clear of " + name)
+		await _step_out_of(s, name)
 
 	# ...and the gate that never trades.
 	var gate = _settlement(GATE)
@@ -1226,8 +1268,8 @@ func _verdict() -> void:
 	for deed in OPPORTUNISTIC:
 		if not _ledger.has(deed):
 			skipped.append(deed)
-	print("drive_completionist: %d frames, %d/%d required, %d/%d opportunistic — %s" % [
-		_frames, REQUIRED.size() - missed.size(), REQUIRED.size(),
+	print("%s: %d frames, %d/%d required, %d/%d opportunistic — %s" % [
+		"drive_completionist_routes" if _routes() else "drive_completionist", _frames, REQUIRED.size() - missed.size(), REQUIRED.size(),
 		OPPORTUNISTIC.size() - skipped.size(), OPPORTUNISTIC.size(),
 		"OK" if _fail == 0 else "*** %d FAILED ***" % _fail])
 	var ticked: Array = _ledger.keys()
