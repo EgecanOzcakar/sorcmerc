@@ -425,8 +425,8 @@ func _ready() -> void:
 			_: world = _small_world()
 		# #231 phase 1: a map built while SORCMERC_ROUTES=1 is set is born a
 		# route world — roads only, nobody on the map but the company. Only a map
-		# built here: a resumed save or a pack's world is what it already was
-		# (core/route_travel.gd says why).
+		# built here: a resumed save is what it already was (core/route_travel.gd
+		# says why), and a pack's world is adopted where game.gd builds it.
 		if RouteTravel.flag_on():
 			RouteTravel.adopt(world)
 	RouteTravel.clear_met(world)   # #231: a road meeting the game was closed on ended with it
@@ -2598,8 +2598,11 @@ func _check_expired_lairs() -> void:
 		_lair_msg.text = WorldLairs.respawn_text(l)
 		_autosave()
 	# #231: a route world keeps no bands on the map, so none come back and none
-	# are refilled; the road decides who is out there.
+	# are refilled; the road decides who is out there — and the towns price the
+	# bands that stand on their roads (phase 2, core/route_pins.gd), which the
+	# boards post as bounties.
 	if RouteTravel.on(world):
+		RouteTravel.tick(world, world.clock.elapsed)
 		return
 	# #142: and the bands the party put down, two days on, out of those lairs.
 	var back: Array = WorldAI.respawn(world, world.clock.elapsed)
@@ -2618,9 +2621,9 @@ func _check_expired_lairs() -> void:
 # the respawn are; a landing can add a lair to the map, so the dioramas are
 # rebuilt whenever the poll had anything to say.
 func _check_raids() -> void:
-	# #231 phase 1: a raid is a band walking to a town, and a route world has
-	# none. Phase 2 makes a raid a town state (docs/spike-route-travel.md §6).
-	if _combat != null or _site != null or RouteTravel.on(world):
+	# #231 phase 2: on a route world the same clock runs, and the band stands
+	# pinned at the town's gate instead of walking to it (core/raids.gd).
+	if _combat != null or _site != null:
 		return
 	var lines: Array = Raids.tick(world, world.clock.elapsed)
 	if lines.is_empty():
@@ -3258,10 +3261,12 @@ func _check_routes(from: Vector2) -> void:
 					else "A way leaves the road here."
 				Sound.play_sfx("landmark_found")
 			"threat", "meet":
-				var band = RouteTravel.band_for(world, ev["spec"])
+				# What the road sent, or a band pinned on it (phase 2) that the
+				# company just walked up to — already on the map for its meeting.
+				var band = ev["band"] if ev.has("band") else RouteTravel.band_for(world, ev["spec"])
 				_party3d.reset(world)   # a figure is only built on reset (party3d.gd)
 				if ev["kind"] == "threat":
-					_meet(band, bool(ev["spec"]["hostile"]))
+					_meet(band, bool(ev["hostile"]))
 				else:
 					_open_approach(band, false)
 				return

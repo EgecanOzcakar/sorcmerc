@@ -297,9 +297,9 @@ static func _world_offers(kind: String, s, world, world_jobs: Array) -> Array:
 static func _target_position(world, q: Dictionary):
 	match String(q["kind"]):
 		"hunt_party":
-			for p in world.parties:
-				if p.id == String(q.get("target_party_id", "")):
-					return p.position
+			var p = world.band(String(q.get("target_party_id", "")))   # on the map, or pinned on a road
+			if p != null:
+				return p.position
 		"raid_settlement":
 			for x in world.settlements:
 				if x.id == String(q.get("target_settlement_id", "")):

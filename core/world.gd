@@ -266,6 +266,15 @@ var routes = null
 # rolls are counted off (one per RouteEncounters.STEP), saved so a reload
 # neither skips a roll nor makes one twice.
 var route_walked := 0.0
+# #231 phase 2: the bands that stand on a road rather than walk the map — a
+# town's bounty, a raid at a gate, a band a story or a pack put down by name
+# (core/route_pins.gd). Held apart from `parties` on purpose: nothing steers
+# them, no band fights them, the map does not draw them, and the road meets one
+# when the company walks past where it stands. Empty on a free-roaming map.
+var pinned: Array[RoamingParty] = []
+# When each town next posts a bounty on a pinned band, by settlement id; -1
+# while its band is out. core/route_pins.gd owns it.
+var bounty_due := {}
 # O15 — the only terrain the map has: hand-placed blobs of water, `{position, radius}`
 # each. A circle is the whole vocabulary; a lake is one, a river is a chain of
 # overlapping ones (see scenes/world/world.gd's _demo_world). Plain dictionaries
@@ -546,6 +555,23 @@ func water_depth(p: Vector2) -> float:
 # party snapped to the shoreline is standing somewhere it is allowed to stand.
 func is_water(pos: Vector2) -> bool:
 	return water_depth(pos) < 0.0
+
+# A band by id, whether it walks the map or stands pinned on a road — what a
+# job, a calling or a raid that names a band looks it up by. null when gone.
+func band(id: String) -> RoamingParty:
+	for p in parties:
+		if p.id == id:
+			return p
+	for p in pinned:
+		if p.id == id:
+			return p
+	return null
+
+# Every band there is: the ones on the map, then the pinned ones.
+func bands() -> Array[RoamingParty]:
+	var out: Array[RoamingParty] = parties.duplicate()
+	out.append_array(pinned)
+	return out
 
 func player() -> RoamingParty:
 	for p in parties:
