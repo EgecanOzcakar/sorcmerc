@@ -389,6 +389,11 @@ func _layout(art_h := -1.0) -> void:
 		rel.append(_op(Vector2(x, y + Icons.FS_BODY), roll, Icons.FS_BODY, Icons.COL_TEXT, avail))
 		x += _w(roll, Icons.FS_BODY)
 		var verdict := "   ✓ made it" if ok else "   ✗ missed"
+		# Degrees of success (core/road_events.gd): the two ends of the die
+		# have their own word, in the stripe's own glyphs.
+		match _s("degree"):
+			"triumph": verdict = "   ✦ a triumph"
+			"disaster": verdict = "   ↯ a disaster"
 		# ponytail: at ~400px a long name plus a long skill pushes the verdict
 		# off the panel's right edge. It is the least load-bearing part of the
 		# line (the stripe and the chips already carry the outcome), so it is
@@ -505,6 +510,12 @@ func _chips() -> Array:
 	var item := _s("item_name")
 	if item != "":
 		out.append({"text": "%s — in the stash" % item, "col": Icons.COL_GOLD})
+	# The right thing made it certain (core/road_events.gd "uses"): what it
+	# cost, when it cost the item.
+	var used := _s("used_item_name")
+	if used != "":
+		out.append({"text": "%s — %s" % [used, "made it certain" if _flag("used_kept") else "used up"],
+			"col": Icons.COL_ACCENT if _flag("used_kept") else Icons.COL_FOE})
 	var lair := _s("lair")
 	if lair != "":
 		out.append({"text": "%s — on the map now" % lair, "col": Icons.COL_ACCENT})

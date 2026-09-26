@@ -12,7 +12,9 @@
 #     next event is that follow-up;
 #   * waving the card away (what drive robots and Enter do) takes the first
 #     choice, "as the orders have it";
-#   * a caravan met on the road trades from its packs, on the same card.
+#   * a caravan met on the road trades from its packs, on the same card;
+#   * a meeting starts the road's gap over (RoadEvents PACING), and a rope of
+#     climbing in the pack makes the ford a certainty, reported without a die.
 #
 # What is arranged, and why: WHICH event the road picks is its own dice
 # (tests/test_road_events.gd covers the pick), so the robot sets up the one it
@@ -91,7 +93,9 @@ func _run() -> void:
 		check(screen._approach_card != null or screen._combat != null, "the band is in front of the company (approach card)")
 		if screen._approach_card != null:
 			var foe = screen._approach_foe
+			screen._last_travel_at = -9999.0
 			screen._close_approach()
+			check(is_equal_approx(screen._last_travel_at, w.clock.elapsed), "a meeting starts the road's gap over")
 			screen._on_approach_reported(foe, {"fight": false})
 		await step(2)
 
@@ -172,6 +176,26 @@ func _run() -> void:
 		check(screen.party.gold < g0 and screen.party.stash_count(item) == n0 + 1, "buying from the caravan spends gold and fills the pack")
 		screen._event_card.acknowledged.emit()
 		await step()
+
+	# 5. The right thing makes it certain: the ford, with a rope of climbing.
+	screen.party.stash_add("rope-of-climbing")
+	await _arrange("ford")
+	if screen._event_card is RoadChoiceCard:
+		var label := ""
+		for b in screen._event_card.buttons():
+			if String(b.name) == "choice_rope":
+				label = String(b.text)
+		check("certain" in label, "the ford's rope choice says the rope makes it certain (%s)" % label.replace("\n", " / "))
+		_press("rope")
+		await step()
+		var rep: Dictionary = screen._event_card._e if screen._event_card != null else {}
+		check(bool(rep.get("ok", false)) and not rep.has("nat") and String(rep.get("used_item", "")) == "rope-of-climbing",
+			"the rope makes the ford certain, with no die on the card (%s)" % [rep.keys()])
+		check(screen.party.stash_count("rope-of-climbing") == 1, "...and the rope is still in the pack")
+		screen._event_card.acknowledged.emit()
+		await step()
+	else:
+		check(false, "the ford is put to the company")
 
 	screen.queue_free()
 	await process_frame

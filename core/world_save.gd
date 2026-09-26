@@ -258,6 +258,8 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		"pinned": world.pinned.map(_band_dict),
 		"bounty_due": world.bounty_due.duplicate(),
 		"road_chain": world.road_chain.duplicate(true),   # #234: follow-ups on the road ahead
+		"road_seen": world.road_seen.duplicate(),         # the road's memory (cooldowns, one-time events)
+		"road_last": world.road_last,
 		"ladder": Ladder.all(),
 		"origin": {"kind": String(world.origin.get("kind", "small")),
 			"seed": int(world.origin.get("seed", 0)),
@@ -314,6 +316,9 @@ static func from_dict(d: Dictionary):
 	for c in d.get("road_chain", []):   # #234; an old save has none
 		if c is Dictionary:
 			world.road_chain.append({"event": String(c.get("event", "")), "due": float(c.get("due", 0.0))})
+	for id in d.get("road_seen", {}):   # an old save remembers nothing: every event is fresh
+		world.road_seen[String(id)] = float(d["road_seen"][id])
+	world.road_last = String(d.get("road_last", ""))
 	for sid in d.get("bounty_due", {}):
 		world.bounty_due[String(sid)] = float(d["bounty_due"][sid])
 	for fd in d.get("fallen", []):   # #142; an old save has none

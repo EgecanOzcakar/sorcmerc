@@ -24,22 +24,51 @@
 # mistyped effect or a follow-up to an event that does not exist is an error
 # the mod browser shows, never a choice that silently does nothing.
 #
-# AN EVENT:
+# AN EVENT (EVENT_KEYS):
 #   {"id", "title", "text",               the situation, before anything is chosen
 #    "bands": [...]?, "needs": "..."?,    where and when it can happen (as D3's)
 #    "chain": true?,                      only ever a follow-up (see "next")
 #    "weight": 1?,                        how often it is picked, against the rest
+#    "cooldown": minutes?,                how long before it can come again
+#                                         (COOLDOWN when absent)
+#    "once": true?,                       never again, once it has been met
 #    "choices": [2 or 3 of them]}
-# A CHOICE:
+# A CHOICE (CHOICE_KEYS):
 #   {"id", "label",
 #    "orders": true?        resolve the D3 event of the same id by the standing
 #                           orders (built-in events only: its outcome is D3's)
 #    "check": {"skills": [...], "dc": N, "role": "scout"|"watch"|""}?
 #    "spells": [...]?       a caster of one of these makes it without a roll
+#    "uses": {"item", "keep": true?}?   carrying the item makes it without a
+#                           roll, and spends it unless "keep"; without a
+#                           check or spells, the choice needs the item
 #    "cost": {"gold": N}?   paid when chosen; offered but disabled when short
-#    "pass": OUTCOME, "fail": OUTCOME       with a check or spells
-#    "then": OUTCOME}                       without one
+#    "pass": OUTCOME, "fail": OUTCOME       with a check, spells or uses
+#                                           ("fail" not with uses alone)
+#    "triumph": OUTCOME?, "disaster": OUTCOME?   with a check: beating the DC
+#                           by TRIUMPH_MARGIN or a natural 20, missing it by
+#                           as much or a natural 1; absent, pass and fail
+#    "then": OUTCOME}                       with none of those
 # AN OUTCOME: "text" (a %s is the roller's name) and any of EFFECTS.
+# Any "text" — an event's or an outcome's — may be a list of variants instead
+# of one string, and one is picked with the road's own dice: the cheapest
+# defence there is against reading the same words twice.
+#
+# REPETITION (docs/research-road-events.md, proposal 1 — CK3's own players'
+# complaint about its travel events is the warning). The road remembers what
+# it put to the company (world.road_seen, world.road_last, saved): an event
+# waits out its cooldown before it can come again, a one-time event never
+# comes twice, the last event is never the next, and sometimes the road has
+# nothing to say (NOTHING_WEIGHT, one more entry on the table). A follow-up
+# is exempt from all of it — it was promised.
+#
+# PACING (proposal 10, Battle Brothers' way). The road does not ask on a
+# metronome. After a question, nothing for PACE_MIN of the clock; then, every
+# PACE_STEP, a chance that climbs to certain by PACE_MAX (pace_chance), so
+# the gap is about Travel.EVENT_INTERVAL on average but never the same twice.
+# The world screen starts the gap over after a fight or a meeting too, so the
+# road does not ask the moment the company has stopped bleeding. A follow-up
+# that is due asks at once (chain_due).
 #
 # CHAINS (#234): an outcome's "next": {"event": id, "after": minutes} puts that
 # event on the road ahead. It fires at the first road check after `after`
@@ -96,9 +125,33 @@ const DATA := "res://data/road_events.json"
 const EFFECTS := ["text", "minutes", "gold", "hurt", "heal", "item", "xp", "opinion", "reveal",
 	"trail", "fight", "next"]
 const NEEDS := ["", "hurt", "settlement", "raided", "routes"]
+# The keys an event and a choice may carry (the headers above), frozen by
+# tests/test_mod_api.gd so a pack's event never loses one.
+const EVENT_KEYS := ["id", "title", "text", "bands", "needs", "chain", "weight", "cooldown", "once", "choices"]
+const CHOICE_KEYS := ["id", "label", "orders", "check", "spells", "uses", "cost", "pass", "fail",
+	"triumph", "disaster", "then"]
 const ROLES := ["", "scout", "watch"]
 const MIN_CHOICES := 2
 const MAX_CHOICES := 3
+
+# ponytail: the repetition and pacing numbers below are taste, not measured —
+# the owner put balancing at the very end of #231; tests/sweep_road_day.gd
+# measures a day's road through Travel.check and knows nothing of either.
+# Revisit them in that pass. The gap they make averages ~346 minutes when
+# every roll finds an event (worked through in tests/test_road_events.gd),
+# against D3's flat 360; NOTHING_WEIGHT stretches that by its share of the table.
+#
+# A day: at an event every six hours or so, four questions go by before the
+# same one can come again.
+const COOLDOWN := 1440.0
+# Against ~15 events of weight 1 in the heartland: a quiet stretch about one
+# time in six.
+const NOTHING_WEIGHT := 3
+# Pathfinder's degrees of success: by this much over or under the DC.
+const TRIUMPH_MARGIN := 8
+const PACE_STEP := 60.0
+const PACE_MIN := 180.0
+const PACE_MAX := 540.0
 
 static var _base: Array = []
 static var _base_loaded := false
@@ -156,9 +209,12 @@ static func validate(src, known: Array = [], own_items: Dictionary = {}) -> Arra
 		var where := "road event \"%s\"" % id
 		if id == "":
 			errors.append("a road event needs an id")
-		for key in ["title", "text"]:
-			if String(e.get(key, "")) == "":
-				errors.append("%s needs a %s" % [where, key])
+		if String(e.get("title", "")) == "":
+			errors.append("%s needs a title" % where)
+		if not _text_ok(e.get("text", "")):
+			errors.append("%s needs a text (or a list of them)" % where)
+		if e.has("cooldown") and not (e["cooldown"] is int or e["cooldown"] is float):
+			errors.append("%s: cooldown is a number of minutes" % where)
 		if not NEEDS.has(String(e.get("needs", ""))):
 			errors.append("%s: needs \"%s\" is not one of %s" % [where, e.get("needs"), NEEDS])
 		for b in e.get("bands", []):
@@ -185,13 +241,27 @@ static func validate(src, known: Array = [], own_items: Dictionary = {}) -> Arra
 					errors.append("%s: \"orders\" resolves a D3 event, and there is none called \"%s\"" % [cw, id])
 				continue
 			var rolled: bool = c.has("check") or c.has("spells")
+			if c.has("uses"):
+				var u = c["uses"]
+				var item := String(u.get("item", "")) if u is Dictionary else ""
+				if item == "" or (not own_items.has(item) and Campaign.item_data(item).is_empty()):
+					errors.append("%s: uses {\"item\"} names no item (\"%s\")" % [cw, item])
+			for key in ["triumph", "disaster"]:
+				if c.has(key):
+					if not c.has("check"):
+						errors.append("%s: a \"%s\" outcome needs a check to roll" % [cw, key])
+					elif not c[key] is Dictionary:
+						errors.append("%s needs a \"%s\" outcome" % [cw, key])
+					else:
+						errors.append_array(_check_outcome(c[key], "%s, %s" % [cw, key], ids, own_items))
 			if c.has("check"):
 				var ck = c["check"]
 				if not ck is Dictionary or not ck.get("skills", []) is Array or (ck.get("skills", []) as Array).is_empty():
 					errors.append("%s: a check needs skills" % cw)
 				elif not ROLES.has(String(ck.get("role", ""))):
 					errors.append("%s: role \"%s\" is not one of %s" % [cw, ck.get("role"), ROLES])
-			for key in (["pass", "fail"] if rolled else ["then"]):
+			var keys: Array = ["pass", "fail"] if rolled else (["pass"] if c.has("uses") else ["then"])
+			for key in keys:
 				if not c.get(key) is Dictionary:
 					errors.append("%s needs a \"%s\" outcome" % [cw, key])
 				else:
@@ -204,6 +274,8 @@ static func _check_outcome(o: Dictionary, where: String, ids: Array, own_items: 
 		var item := String(o["item"])
 		if item != "salvage" and not own_items.has(item) and Campaign.item_data(item).is_empty():
 			errors.append("%s: item \"%s\" is not an item" % [where, item])
+	if o.has("text") and not _text_ok(o["text"]):
+		errors.append("%s: text is a string or a list of them" % where)
 	for k in o:
 		if not EFFECTS.has(String(k)):
 			errors.append("%s: \"%s\" is not an outcome effect (%s)" % [where, k, ", ".join(EFFECTS)])
@@ -219,11 +291,44 @@ static func _check_outcome(o: Dictionary, where: String, ids: Array, own_items: 
 		errors.append("%s: fight is {\"faction\": id or \"road\"}" % where)
 	return errors
 
+static func _text_ok(t) -> bool:
+	if t is String:
+		return t != ""
+	if t is Array:
+		return not t.is_empty() and t.all(func(x): return x is String and x != "")
+	return false
+
+# One of a text's variants, with the road's dice ("" for none).
+static func _text(t, rng) -> String:
+	if t is Array:
+		return String(t[rng.roll_die(t.size()) - 1]) if not t.is_empty() else ""
+	return String(t) if t != null else ""
+
+# --- pacing -------------------------------------------------------------------
+
+# The chance the road asks at a PACE_STEP roll, `since` minutes of the clock
+# after it last did (PACING above).
+static func pace_chance(since: float) -> float:
+	return clampf((since - PACE_MIN) / (PACE_MAX - PACE_MIN), 0.0, 1.0)
+
+# A follow-up whose time has come: it asks at once, whatever the pace.
+static func chain_due(world) -> bool:
+	return world != null and world.road_chain.any(func(c): return float(c["due"]) <= world.clock.elapsed)
+
+# Whether the road asks at this PACE_STEP roll.
+static func asks_now(world, since: float, rng) -> bool:
+	if chain_due(world):
+		return true
+	return rng.roll_die(1000) <= int(round(pace_chance(since) * 1000.0))
+
 # --- picking ------------------------------------------------------------------
 
 # The event the road puts to the company now: a follow-up whose time has come,
 # first; else one of the events this country and this party could meet (the
-# gates D3 always had), weighted. {} when nothing fits.
+# gates D3 always had) that the road has not asked too lately (REPETITION),
+# weighted, against NOTHING_WEIGHT of quiet. {} when nothing fits or nothing
+# happens. The event comes back with one of its text variants picked, and the
+# road remembers asking it.
 static func pick(party, world, rng) -> Dictionary:
 	if party == null or world == null:
 		return {}
@@ -233,7 +338,7 @@ static func pick(party, world, rng) -> Dictionary:
 			world.road_chain.remove_at(i)
 			var e := event(String(c["event"]))
 			if not e.is_empty():
-				return e
+				return _asked(e, world, rng)
 	var band := ""
 	var p = world.player()
 	if p != null:
@@ -248,16 +353,42 @@ static func pick(party, world, rng) -> Dictionary:
 			continue
 		if not _needs_met(String(e.get("needs", "")), party, world):
 			continue
+		if not rested(e, world):
+			continue
 		table.append(e)
 		total += maxi(1, int(e.get("weight", 1)))
 	if table.is_empty():
 		return {}
-	var r: int = rng.roll_die(total)
+	var r: int = rng.roll_die(total + NOTHING_WEIGHT)
 	for e in table:
 		r -= maxi(1, int(e.get("weight", 1)))
 		if r <= 0:
-			return e
-	return table[-1]
+			return _asked(e, world, rng)
+	return {}   # the quiet stretch
+
+# Whether the road may ask `e` again yet: never twice running, a one-time
+# event never again, anything else once its cooldown is out.
+static func rested(e: Dictionary, world) -> bool:
+	var id := String(e["id"])
+	if id == world.road_last:
+		return false
+	if not world.road_seen.has(id):
+		return true
+	if bool(e.get("once", false)):
+		return false
+	return world.clock.elapsed - float(world.road_seen[id]) >= float(e.get("cooldown", COOLDOWN))
+
+# `e` as it is put to the company this time — its text picked from its
+# variants — and remembered.
+static func _asked(e: Dictionary, world, rng) -> Dictionary:
+	var id := String(e["id"])
+	world.road_seen[id] = world.clock.elapsed
+	world.road_last = id
+	if not e.get("text") is Array:
+		return e
+	var out := e.duplicate()
+	out["text"] = _text(e["text"], rng)
+	return out
 
 static func _needs_met(need: String, party, world) -> bool:
 	if need == "routes":
@@ -277,8 +408,12 @@ static func options(e: Dictionary, party, world) -> Array:
 		if bool(ch.get("orders", false)):
 			o["hint"] = "the standing orders decide"
 		var caster = party.caster_of(ch.get("spells", [])) if ch.has("spells") else null
+		var item := _uses(ch)
 		if caster != null:
 			o["hint"] = "%s's %s answers it" % [caster.cname, String(ch["spells"][0]).replace("-", " ")]
+		elif item != "" and party.stash_count(item) > 0:
+			o["hint"] = "the %s makes it certain%s" % [Campaign.item_name(item),
+				"" if bool(ch["uses"].get("keep", false)) else " — and is used up"]
 		elif ch.has("check"):
 			var ck: Dictionary = ch["check"]
 			var who := Travel._assign(party, ck, Travel.orders(party))
@@ -291,6 +426,9 @@ static func options(e: Dictionary, party, world) -> Array:
 		elif ch.has("spells"):
 			o["disabled"] = true
 			o["why"] = "nobody knows the spell"
+		elif item != "":
+			o["disabled"] = true
+			o["why"] = "no %s in the pack" % Campaign.item_name(item)
 		var gold: int = int(ch.get("cost", {}).get("gold", 0))
 		if gold > 0:
 			o["hint"] = ("%s — " % o["hint"] if o["hint"] != "" else "") + "%d gold" % gold
@@ -332,23 +470,44 @@ static func choose(e: Dictionary, choice_id: String, party, world, rng) -> Dicti
 	var outcome: Dictionary
 	var who := ""
 	var caster = party.caster_of(ch.get("spells", [])) if ch.has("spells") else null
+	var item := _uses(ch)
 	if caster != null:
 		out.merge({"ok": true, "char_id": caster.id, "cname": caster.cname, "skill": "",
 			"spell": String(ch["spells"][0]), "named": false}, true)
 		outcome = ch["pass"]
 		who = caster.cname
+	elif item != "" and party.stash_count(item) > 0:
+		# The right thing makes it certain (proposal 8): no roll, the pass, and
+		# the one who would have rolled it is the one who used it.
+		var by := Travel._assign(party, ch["check"], Travel.orders(party)) if ch.has("check") else {}
+		who = String(by.get("cname", ""))
+		if who == "":
+			var first: Array = party.party_characters()
+			who = String(first[0].cname) if not first.is_empty() else ""
+		out.merge({"ok": true, "cname": who, "used_item": item, "used_item_name": Campaign.item_name(item),
+			"used_kept": bool(ch["uses"].get("keep", false))}, true)
+		if not bool(ch["uses"].get("keep", false)):
+			party.stash_remove(item)
+		outcome = ch["pass"]
 	elif ch.has("check"):
 		var r := Travel.roll(party, ch["check"], rng)
 		if r.is_empty():
 			return {}
 		out.merge(r, true)
 		outcome = ch["pass"] if bool(r["ok"]) else ch["fail"]
+		# Degrees of success (proposal 7): four stories from one roll, when
+		# the event has written the other two.
+		var degree := degree_of(ch, int(r["nat"]), int(r["nat"]) + int(r["bonus"]), int(r["dc"]))
+		if degree != "":
+			outcome = ch[degree]
+			out["degree"] = degree
+			out["ok"] = degree == "triumph"
 		who = String(r["cname"])
-		out["kind"] = "good" if bool(r["ok"]) else "bad"
+		out["kind"] = "good" if bool(out["ok"]) else "bad"
 	else:
 		outcome = ch.get("then", {})
 		out["ok"] = true
-	var text := String(outcome.get("text", ""))
+	var text := _text(outcome.get("text", ""), rng)
 	out["text"] = (text % who) if "%s" in text else text
 	apply(outcome, party, world, rng, out)
 	# The road-events tally counts every event met; the "every kind" set is
@@ -359,6 +518,26 @@ static func choose(e: Dictionary, choice_id: String, party, world, rng) -> Dicti
 	else:
 		Travel._note_event(String(e["id"]))
 	return out
+
+# The item a choice's "uses" names, or "".
+static func _uses(ch: Dictionary) -> String:
+	var u = ch.get("uses")
+	return String(u.get("item", "")) if u is Dictionary else ""
+
+# "triumph", "disaster" or "" for a roll against a choice: beating the DC by
+# TRIUMPH_MARGIN or a natural 20 is a triumph, missing it by as much or a
+# natural 1 a disaster — only when the choice has written that outcome. The
+# die speaks first: a natural 20 is a triumph even when the total falls short,
+# a natural 1 a disaster however big the bonus (BG3's rule, and the reason a
+# player watches the die).
+static func degree_of(ch: Dictionary, nat: int, total: int, dc: int) -> String:
+	var up: bool = nat == 20 or (nat != 1 and total >= dc + TRIUMPH_MARGIN)
+	var down: bool = nat == 1 or (nat != 20 and total <= dc - TRIUMPH_MARGIN)
+	if up and ch.has("triumph"):
+		return "triumph"
+	if down and ch.has("disaster"):
+		return "disaster"
+	return ""
 
 # An outcome's effects, applied, each recorded on `out` the way D3's card
 # already reads them (minutes, gold, hurt, healed, item/item_name, lair).

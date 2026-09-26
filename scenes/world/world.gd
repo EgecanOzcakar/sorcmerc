@@ -319,6 +319,7 @@ var _site = null                     # D1: the delve in progress (core/site.gd),
 # forage stamp — a reload just restarts the cadence, which is not worth a
 # save-format field for something that fires every six world-hours anyway.
 var _last_travel_at: float = 0.0
+var _road_rolled_at: float = 0.0   # the last PACE_STEP roll (core/road_events.gd PACING)
 var _event_card: Control = null
 # #70: the map halts when the party reaches where it was sent, and runs again
 # the moment it is sent somewhere else — arriving is not a reason to keep the
@@ -473,6 +474,7 @@ func _ready() -> void:
 	_party3d.reset(world)
 	_last_forage_at = world.clock.elapsed   # T9x: start the cadence from load time, not zero
 	_last_travel_at = world.clock.elapsed   # D3: same, for road events
+	_road_rolled_at = world.clock.elapsed
 	set_process(true)
 	_build_hud()
 	_refresh_pace_btn()
@@ -1891,6 +1893,7 @@ func _run_combat(spec: Dictionary, difficulty: String,
 	# and a two-round ambush barely dents it. The clock is paused through the
 	# fight itself, so this is the whole bill.
 	world.clock.elapsed += int(result.get("rounds", 0)) * MINUTES_PER_ROUND
+	_road_quiet()
 	if _combat_overlay != null:
 		_combat_overlay.queue_free()
 		_combat_overlay = null
@@ -3299,6 +3302,7 @@ func _close_approach() -> void:
 	if _approach_card != null:
 		_approach_card.queue_free()
 		_approach_card = null
+		_road_quiet()
 	_approach_foe = null
 
 # D3 — the other half of keeping a 1x-8x fast-forward honest. Travel used to be
@@ -3317,19 +3321,33 @@ func _close_approach() -> void:
 # and every roll is made by whoever the orders put on that job. Same gates as
 # every other _check_*: not mid-fight, not in a settlement, not underground,
 # not already paused.
+# The research pass (docs/research-road-events.md): not on a metronome any
+# more. Every RoadEvents.PACE_STEP of the clock the road rolls to ask, at a
+# chance that climbs with the time since it last did (RoadEvents.PACING); a
+# follow-up that is due asks at once; and a fight or a meeting starts the gap
+# over (_road_quiet), so nothing is asked of a company still binding wounds.
 func _check_travel() -> void:
 	if _combat != null or not _visit.is_empty() or _site != null or world.clock.is_paused():
 		return
 	if _event_card != null:
 		return          # one card at a time; the clock is stopped behind it anyway
-	if world.clock.elapsed - _last_travel_at < Travel.EVENT_INTERVAL:
-		return
+	var rng = RNG.new(maxi(1, absi(hash("road|%d" % int(world.clock.elapsed)))))
+	if not RoadEvents.chain_due(world):
+		if world.clock.elapsed - _road_rolled_at < RoadEvents.PACE_STEP:
+			return
+		_road_rolled_at = world.clock.elapsed
+		if not RoadEvents.asks_now(world, world.clock.elapsed - _last_travel_at, rng):
+			return
 	_last_travel_at = world.clock.elapsed
-	var e: Dictionary = RoadEvents.pick(party, world,
-		RNG.new(maxi(1, absi(hash("road|%d" % int(world.clock.elapsed))))))
+	var e: Dictionary = RoadEvents.pick(party, world, rng)
 	if e.is_empty():
 		return
 	_ask_road(e)
+
+# A fight or a meeting is over: the road's gap starts again from here.
+func _road_quiet() -> void:
+	_last_travel_at = world.clock.elapsed
+	_road_rolled_at = world.clock.elapsed
 
 # Stop the clock and put a road event's question on the choice card — the
 # road's own events, and anything else shaped like one (a caravan's packs).

@@ -1417,6 +1417,20 @@
       "target_region_id",
       "target_settlement_id"
     ],
+    "road_events.choice_keys": [
+      "check",
+      "cost",
+      "disaster",
+      "fail",
+      "id",
+      "label",
+      "orders",
+      "pass",
+      "spells",
+      "then",
+      "triumph",
+      "uses"
+    ],
     "road_events.effects": [
       "fight",
       "gold",
@@ -1430,6 +1444,18 @@
       "text",
       "trail",
       "xp"
+    ],
+    "road_events.event_keys": [
+      "bands",
+      "chain",
+      "choices",
+      "cooldown",
+      "id",
+      "needs",
+      "once",
+      "text",
+      "title",
+      "weight"
     ],
     "road_events.needs": [
       "hurt",

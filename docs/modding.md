@@ -679,6 +679,15 @@ three), and optionally `bands` (the countries it can happen in — `world.bands`
 above), `needs` (a state the world must be in), `weight` (how often it is
 picked; default 1) and `chain` (`true`: it only ever happens as a follow-up).
 
+The road remembers what it asked, so a table does not have to be big to feel
+fresh: an event never comes twice running, and waits out a `cooldown` (minutes
+of the clock; a day when left out) before it can come again. `once: true`
+makes it a one-time event — met once, never again that campaign. Sometimes
+the road asks nothing at all. A follow-up is exempt: it was promised.
+
+The event keys, all together: `id`, `title`, `text`, `bands`, `needs`,
+`chain`, `weight`, `cooldown`, `once`, `choices`.
+
 `needs` is one of: `"hurt"` (somebody is carrying a wound), `"settlement"`
 (the map has a town), `"raided"` (a raided town's raiders are still hidden),
 `"routes"` (the map is a route world, with roads).
@@ -691,7 +700,19 @@ A **choice**: `id`, `label`, and one of three shapes —
 - with `"spells": [...]` a caster who knows one of them does it without a
   roll (`pass` and `fail` as above: `fail` is never reached but must exist
   when there is no check either);
-- with neither, it has a single `then` outcome.
+- with `"uses": {"item": id}` carrying that item does it without a roll, and
+  spends it — `"keep": true` for something that is not used up, like a rope
+  of climbing. With a check or spells as well, the item is one more way to
+  make it; alone, the choice needs the item, and has a `pass` outcome only;
+- with none of those, it has a single `then` outcome.
+
+A choice with a check may add a `triumph` and a `disaster` outcome: beating
+the DC by 8 or more, or a natural 20, is a triumph; missing it by 8 or more,
+or a natural 1, a disaster. Leave either out and that end of the die is an
+ordinary `pass` or `fail`.
+
+The choice keys, all together: `id`, `label`, `orders`, `check`, `spells`,
+`uses`, `cost`, `pass`, `fail`, `triumph`, `disaster`, `then`.
 
 Any choice may add `"cost": {"gold": N}`, paid when it is chosen; the card
 shows it and disables the choice when the purse is short. (Built-in events
@@ -700,7 +721,8 @@ resolves the original self-rolling road event of the same id. A pack's own
 events cannot use it.)
 
 An **outcome** is `text` (a `%s` in it is the roller's name) and any of these
-effects:
+effects. Any `text`, an event's or an outcome's, may be a list of variants
+instead of one string: one is picked each time.
 
 | effect | does |
 |---|---|
@@ -719,7 +741,8 @@ effects:
 
 Checked at scan time: an unknown effect, a follow-up to an event that does not
 exist, an item that does not exist, fewer than two or more than three choices,
-a choice without its outcome — each is a line in the browser, and the pack does
+a choice without its outcome, a `triumph` or `disaster` on a choice with no
+check — each is a line in the browser, and the pack does
 not load until it is fixed. Turning the pack off takes its events back out of
 the road's table.
 

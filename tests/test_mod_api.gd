@@ -53,7 +53,8 @@ const DOCUMENTED := ["manifest.kinds", "manifest.access", "manifest.data_files",
 	"effects.kinds", "effects.reaction_triggers", "quest.kinds", "story.beat_kinds",
 	"story.condition_keys", "story.effect_keys", "story.quest_states",
 	"world.kinds", "world.behaviors", "world.factions", "world.bands", "items.slots", "items.keys",
-	"road_events.effects", "road_events.needs", "road_events.roles"]
+	"road_events.effects", "road_events.needs", "road_events.roles",
+	"road_events.event_keys", "road_events.choice_keys"]
 
 const ID_FILES := ["spells.json", "bestiary.json", "monsters.json", "magic-items.json",
 	"classes.json", "subclasses.json", "species.json", "backgrounds.json", "feats.json",
@@ -91,6 +92,8 @@ static func vocab() -> Dictionary:
 		"road_events.effects": RoadEvents.EFFECTS,
 		"road_events.needs": RoadEvents.NEEDS.filter(func(n): return n != ""),
 		"road_events.roles": RoadEvents.ROLES.filter(func(n): return n != ""),
+		"road_events.event_keys": RoadEvents.EVENT_KEYS,
+		"road_events.choice_keys": RoadEvents.CHOICE_KEYS,
 	}
 
 static func ids() -> Dictionary:

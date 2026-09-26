@@ -274,6 +274,12 @@ var route_walked := 0.0
 # "next"), each {event, due}: the first road check after `due` world-minutes
 # fires it before any random pick. Saved, so a chain survives a reload.
 var road_chain: Array[Dictionary] = []
+# The road's memory (core/road_events.gd): when each event was last put to the
+# company ({id: world-minutes}) and which one it was last, so an event waits
+# out its cooldown, a one-time event never comes twice and the same question
+# is never asked twice running. Saved, so a reload is not a way round either.
+var road_seen := {}
+var road_last := ""
 # #229: band-vs-band battles still being fought. core/world_battle.gd is the
 # only writer — it opens one when two hostile bands meet and closes it when the
 # fight's rounds have run out on the clock; this file only reads the list, to
