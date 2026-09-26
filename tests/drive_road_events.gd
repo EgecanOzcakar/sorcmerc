@@ -11,7 +11,8 @@
 #   * a choice that chains puts its follow-up on the road ahead, and the road's
 #     next event is that follow-up;
 #   * waving the card away (what drive robots and Enter do) takes the first
-#     choice, "as the orders have it".
+#     choice, "as the orders have it";
+#   * a caravan met on the road trades from its packs, on the same card.
 #
 # What is arranged, and why: WHICH event the road picks is its own dice
 # (tests/test_road_events.gd covers the pick), so the robot sets up the one it
@@ -142,6 +143,35 @@ func _run() -> void:
 		screen._event_card.acknowledged.emit()
 		await step()
 	check(not w.clock.is_paused() or screen._halted_on_arrival, "the clock is given back after the answer")
+
+	# 4. #232's meetings: a caravan met on the road opens its packs on the
+	#    road's choice card, and buying from it is a real purchase.
+	var World = load("res://core/world.gd")
+	var caravan = World.RoamingParty.new("drive-caravan", w.player().position, "human")
+	caravan.troops.append({"role": "light", "level": 2})
+	caravan.ai = {"behavior": "met", "source": "caravan"}
+	w.add_party(caravan)
+	screen._open_approach(caravan, false)
+	var ways: Array = screen._approach_card._opts.map(func(o): return String(o["id"]))
+	check(ways.has("trade") and ways.has("news") and ways.has("job"), "a caravan's card offers trade, news and work (%s)" % [ways])
+	screen._close_approach()
+	screen._approach_foe = caravan
+	screen._on_approach_chosen("trade")
+	await step()
+	screen._event_card.acknowledged.emit()   # the report: "they open their packs"
+	await step()
+	check(screen._event_card is RoadChoiceCard and String(screen._event_card._e.get("id", "")) == "caravan-wares",
+		"trading opens the caravan's packs on the choice card")
+	if screen._event_card is RoadChoiceCard:
+		var buy: Button = screen._event_card.buttons()[0]
+		var item: String = String(screen._event_card._e["choices"][0]["then"]["item"])
+		var g0: int = screen.party.gold
+		var n0: int = screen.party.stash_count(item)
+		buy.pressed.emit()
+		await step()
+		check(screen.party.gold < g0 and screen.party.stash_count(item) == n0 + 1, "buying from the caravan spends gold and fills the pack")
+		screen._event_card.acknowledged.emit()
+		await step()
 
 	screen.queue_free()
 	await process_frame

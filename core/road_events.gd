@@ -351,7 +351,13 @@ static func choose(e: Dictionary, choice_id: String, party, world, rng) -> Dicti
 	var text := String(outcome.get("text", ""))
 	out["text"] = (text % who) if "%s" in text else text
 	apply(outcome, party, world, rng, out)
-	Travel._note_event(String(e["id"]))
+	# The road-events tally counts every event met; the "every kind" set is
+	# D3's table (core/achievements.gd sizes the goal off Travel.EVENTS), so a
+	# follow-up, a caravan's packs or a pack's own event is met but not collected.
+	if Travel.event(String(e["id"])).is_empty():
+		Travel.Ach.bump("road_events")
+	else:
+		Travel._note_event(String(e["id"]))
 	return out
 
 # An outcome's effects, applied, each recorded on `out` the way D3's card

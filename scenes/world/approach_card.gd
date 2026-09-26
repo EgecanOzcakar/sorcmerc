@@ -100,7 +100,8 @@ const CAPTION := "T H E Y   H A V E   S E E N   Y O U"
 # neither can come out as an invented colour or as tofu. The colours say what
 # the way spends: blue is information (no fight at all), gold is gold (the toll),
 # green is the party's own edge (the first round), red is blood.
-const WAY_GLYPH := {"avoid": "☁", "parley": "⚖", "ambush": "➶", "engage": "⚔"}
+const WAY_GLYPH := {"avoid": "☁", "parley": "⚖", "ambush": "➶", "engage": "⚔",
+	"demand": "⚖"}   # #232: the other half of a toll — the same scales, the same gold
 const UNKNOWN_GLYPH := "·"
 
 # The standing-order mark. ★ is already on the icon sheet (NODE_GLYPHS.boss), so
@@ -193,9 +194,10 @@ var _art: Texture2D = null    # the band on the road: one picture, fixed for the
 # what the player is actually looking at, and neither presumes a choice.
 const SCENE_ART := "approach-engage"          # a hostile band, closing
 const FRIENDLY_SCENE_ART := "approach-greet"  # a civil one, hailing
-# The friendly card is the two no-roll ways (core/approach.gd's FRIENDLY_ORDER);
-# nothing else on the dict says which kind of meeting this is.
-const FRIENDLY_WAYS := ["greet", "pass"]
+# The friendly card is the no-roll ways (core/approach.gd's FRIENDLY_ORDER —
+# greet and pass, and since #232 trade, news and a job); nothing else on the
+# dict says which kind of meeting this is.
+const FRIENDLY_WAYS := ["greet", "trade", "news", "job", "pass"]
 
 func _s_of(i: int, key: String) -> String:
 	return str(_opt(i).get(key, ""))
@@ -275,7 +277,7 @@ func _way(o: Dictionary) -> String:
 func _way_color(o: Dictionary) -> Color:
 	match _os(o, "id"):
 		"avoid": return Icons.COL_ACCENT
-		"parley": return Icons.COL_GOLD
+		"parley", "demand": return Icons.COL_GOLD
 		"ambush": return Icons.COL_PARTY
 		"engage": return Icons.COL_FOE
 	return Icons.COL_MUTED

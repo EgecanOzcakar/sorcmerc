@@ -3215,7 +3215,7 @@ func _open_approach(foe, hostile := true) -> void:
 	_approach_card.chosen.connect(_on_approach_chosen)
 	_approach_card.foe_faction = String(foe.faction)
 	var kind := String(_road_objective(foe, "").get("kind", ""))
-	_approach_card.show_approach(Approach.options(party, foe, hostile),
+	_approach_card.show_approach(Approach.options(party, foe, hostile, world),
 		"%s (%d)%s" % [EnemyNames.upper_first(EnemyNames.band_name(foe, world)), foe.troops.size(), ("  ·  " + Objectives.title(kind)) if kind != "" else ""])
 
 func _on_approach_chosen(way: String) -> void:
@@ -3223,7 +3223,9 @@ func _on_approach_chosen(way: String) -> void:
 	if foe == null:
 		return
 	var r: Dictionary = Approach.resolve(party, foe, way,
-		RNG.new(maxi(1, absi(hash("%s|%s|%d" % [foe.id, way, int(world.clock.elapsed)])))))
+		RNG.new(maxi(1, absi(hash("%s|%s|%d" % [foe.id, way, int(world.clock.elapsed)])))), world)
+	if r.has("lair") or r.has("trail"):
+		_lairs3d.reset(world)   # #232: news put a place on the map
 	_close_approach()
 	# The outcome is reported on the same card the road events use — it is the
 	# same kind of thing, and a second card style would be a second thing to
@@ -3246,6 +3248,8 @@ func _approach_event(r: Dictionary, faction := "") -> Dictionary:
 	e["kind"] = "bad" if bool(r.get("forced_ambush", false)) or r.has("opinion") else "good"
 	if r.has("toll"):
 		e["gold"] = -int(r["toll"])
+	if r.has("tribute"):
+		e["gold"] = int(r["tribute"])
 	return e
 
 # Which approach outcome is a breakout, and at what roster: seen mid-slip is
@@ -3269,6 +3273,9 @@ func _on_approach_reported(foe, r: Dictionary) -> void:
 			_halt()   # a band the party walked up to on purpose: it arrived, and waits for orders
 		else:
 			world.clock.resume()
+		# #232: a caravan's packs, asked on the road's own choice card.
+		if r.has("wares"):
+			_ask_road(r["wares"])
 		return
 	await _launch_combat(foe, bool(r.get("scouted_ahead", false)),
 		bool(r.get("forced_ambush", false)), _jumped_for(r))
@@ -3307,6 +3314,11 @@ func _check_travel() -> void:
 		RNG.new(maxi(1, absi(hash("road|%d" % int(world.clock.elapsed))))))
 	if e.is_empty():
 		return
+	_ask_road(e)
+
+# Stop the clock and put a road event's question on the choice card — the
+# road's own events, and anything else shaped like one (a caravan's packs).
+func _ask_road(e: Dictionary) -> void:
 	world.clock.pause()
 	_pause_btn.text = "Resume"
 	var card = RoadChoiceCard.new()

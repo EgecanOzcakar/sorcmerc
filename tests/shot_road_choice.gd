@@ -1,5 +1,6 @@
 # #232 — the road asks, for the PR: the choice card over the map (the camp in
 # the hollow, three things to do about it), and the answer on D3's own card.
+# #232's meetings: a caravan's new offers, and demand against a weak band.
 # Not a test.
 #
 # Not headless — the capture needs a real rendering driver (xvfb-run is enough):
@@ -37,6 +38,27 @@ func _init() -> void:
 	if w._event_card != null and w._event_card.has_method("_land_now"):
 		w._event_card._land_now()
 	await _shoot(w, "res://docs/shots/road-choice-answer.png")
+	if w._event_card != null:
+		w._event_card.acknowledged.emit()
+	for i in 4:
+		await process_frame
+	# #232's meetings: a caravan (trade, news, a job) and a weak band (demand).
+	var World = load("res://core/world.gd")
+	var p = w.world.player()
+	var caravan = World.RoamingParty.new("shot-caravan", p.position, "human")
+	caravan.troops.append({"role": "light", "level": 2})
+	caravan.ai = {"behavior": "met", "source": "caravan"}
+	w.world.add_party(caravan)
+	w._party3d.reset(w.world)
+	w._open_approach(caravan, false)
+	await _shoot(w, "res://docs/shots/road-meeting-caravan.png")
+	w._close_approach()
+	var weak = World.RoamingParty.new("shot-weak", p.position, "goblinoid")
+	weak.troops.append({"role": "light", "level": 1})
+	w.world.add_party(weak)
+	w._party3d.reset(w.world)
+	w._open_approach(weak, true)
+	await _shoot(w, "res://docs/shots/road-meeting-demand.png")
 	quit()
 
 func _shoot(w, path: String) -> void:
