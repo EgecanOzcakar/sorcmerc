@@ -270,6 +270,14 @@ var routes = null
 # rolls are counted off (one per RouteEncounters.STEP), saved so a reload
 # neither skips a roll nor makes one twice.
 var route_walked := 0.0
+# #229: band-vs-band battles still being fought. core/world_battle.gd is the
+# only writer — it opens one when two hostile bands meet and closes it when the
+# fight's rounds have run out on the clock; this file only reads the list, to
+# hold the two bands where they stand in tick(). One per battle:
+#   {"a", "b": the two party ids, "winner": one of them, "outcome": the
+#    Combat's own word for it, "rounds": int, "at": Vector2 (between the two,
+#    where the map draws it), "from", "until": world-minutes}
+var clashes: Array[Dictionary] = []
 # #231 phase 2: the bands that stand on a road rather than walk the map — a
 # town's bounty, a raid at a gate, a band a story or a pack put down by name
 # (core/route_pins.gd). Held apart from `parties` on purpose: nothing steers
@@ -583,6 +591,13 @@ func player() -> RoamingParty:
 			return p
 	return null
 
+# #229: the battle `p` is locked in, or {} when it is free to walk.
+func clash_of(p) -> Dictionary:
+	for c in clashes:
+		if c["a"] == p.id or c["b"] == p.id:
+			return c
+	return {}
+
 # A goal inside water is snapped back to the bank — the last dry point on the
 # straight line from the party toward it, which is where the party would have
 # been stopped anyway. Clicking the middle of a lake therefore means "walk to
@@ -629,7 +644,9 @@ func tick(delta: float) -> float:
 	if dt <= 0.0:
 		return 0.0
 	for p in parties:
-		move_toward_goal(p, dt)
+		# #229: a band in a fight stands its ground until the fight is over.
+		if clashes.is_empty() or clash_of(p).is_empty():
+			move_toward_goal(p, dt)
 	return dt
 
 # move_toward never overshoots, so arriving is just position == goal. Long

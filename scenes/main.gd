@@ -104,6 +104,9 @@ const BTN_SIZE := Vector2(52, 52)
 # the hex behind it, since Figures3D (a Board child) draws after Board itself.
 var _hud_layer: CanvasLayer
 var _hud_overlay: Control
+# #195: the bars themselves, on a Control of their own that is the board's
+# rect and clips to it (see _draw_hud_bars).
+var _hud_bars: Control
 
 @onready var _header := Label.new()
 @onready var _order := HBoxContainer.new()   # turn-order icon strip along the top
@@ -368,6 +371,11 @@ func _ready() -> void:
 	_hud_layer = CanvasLayer.new()
 	_hud_layer.layer = 5   # above Board and Figures3D, both layer 0 — see _draw_hud_overlay
 	add_child(_hud_layer)
+	_hud_bars = Control.new()
+	_hud_bars.clip_contents = true
+	_hud_bars.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hud_bars.draw.connect(_draw_hud_bars)
+	_hud_layer.add_child(_hud_bars)   # first, so the chips and numbers below draw over it
 	_hud_overlay = Control.new()
 	_hud_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_hud_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -2575,30 +2583,66 @@ func _process(dt: float) -> void:
 		_hud_layer.visible = not _overlay_up()
 	if _hud_overlay:
 		_hud_overlay.queue_redraw()
+	if _hud_bars and _board:
+		# The board's rect, carried by hand: a CanvasLayer breaks the Control
+		# chain, so no anchor can follow the board from here.
+		_hud_bars.position = _board.global_position
+		_hud_bars.size = _board.size
+		_hud_bars.queue_redraw()
 	if _bscroll:   # grow with the wrapped rows, up to BUTTON_ROWS, then scroll
 		var row := BTN_SIZE.y * Settings.chrome_scale() + 6.0
 		_bscroll.custom_minimum_size.y = minf(_buttons.get_combined_minimum_size().y,
 			row * BUTTON_ROWS)
 
-# T-hud: HP bar + condition tags for every living combatant, painted on a
-# CanvasLayer above Board and everything Board parents (Figures3D included) —
-# see Board._paint_token_hud's header comment for why this can't just call
-# back into Board's own drawing code. Coordinates are Board-local; draw_set_
-# transform(origin) once up front instead of adding board.global_position to
-# every point below.
+# #195: "Z fighting bug exists in the health bars on fighting screen". T-hud
+# lifted the bars onto a CanvasLayer above everything so a figure could not
+# cover them, and that layer was the whole window. Two things followed.
+#
+# The bars were not the board's any more. A body panned or zoomed off the
+# board's edge — or just standing on its top or bottom row, whose bar hangs
+# below the token — painted its bar and "21/21" straight over the turn-order
+# strip, the log, the action line and the skill bar, on top of chrome that has
+# its own HP numbers in the same green: two health readouts fighting for one
+# spot. They are clipped to the board's rect now, on a Control of their own
+# that is that rect (the odds chip, barks and damage numbers stay on the
+# unclipped overlay: they are brief, and are read over the action anyway).
+#
+# And they were painted in roster order, so where two bars overlapped — two
+# bodies a hex apart on a diagonal, or the conditions strip of one over the
+# bar of the next — whichever was fielded first went underneath whatever the
+# figures in front said. Back to front now, the order the figures themselves
+# stand in: the nearer body's bar is the one on top.
+func _draw_hud_bars() -> void:
+	if cb == null or _board == null:
+		return
+	var s: float = hex_px
+	var fz := clampf(_zoom, 0.75, 1.7)
+	var shown: Array = []
+	for c in cb.combatants:
+		if c.is_dead() or c.has("withdrawn"):
+			continue
+		shown.append([_board._tok.get(c.id, _board._pix(c.pos)) + _board._lunge(c.id), c])
+	shown.sort_custom(func(a, b): return a[0].y < b[0].y)
+	for e in shown:
+		var p: Vector2 = e[0]
+		var c = e[1]
+		var rad := s * 0.62
+		var tp := p if c.is_down() else p + Vector2(0, -rad * 0.55)
+		Board._paint_token_hud(_hud_bars, c, _board._hp.get(c.id, float(c.hp)), p, tp, s, rad, fz)
+
+# T-hud: what floats over the fight — odds chips, barks, damage numbers, the
+# roll reveal — painted on a CanvasLayer above Board and everything Board
+# parents (Figures3D included); see Board._paint_token_hud's header comment for
+# why this can't just call back into Board's own drawing code. The HP bars and
+# condition tags were here too, and are _draw_hud_bars' now (#195), on the same
+# layer. Coordinates are Board-local; draw_set_transform(origin) once up front
+# instead of adding board.global_position to every point below.
 func _draw_hud_overlay() -> void:
 	if cb == null or _board == null:
 		return
 	_hud_overlay.draw_set_transform(_board.global_position)
 	var s: float = hex_px
 	var fz := clampf(_zoom, 0.75, 1.7)
-	for c in cb.combatants:
-		if c.is_dead() or c.has("withdrawn"):
-			continue
-		var p: Vector2 = _board._tok.get(c.id, _board._pix(c.pos)) + _board._lunge(c.id)
-		var rad := s * 0.62
-		var tp := p if c.is_down() else p + Vector2(0, -rad * 0.55)
-		Board._paint_token_hud(_hud_overlay, c, _board._hp.get(c.id, float(c.hp)), p, tp, s, rad, fz)
 
 	# The attack/save/shove odds chip: same layer as the HP bar above, and for
 	# the same reason — a Figures3D model is a Board child, so it draws on top
@@ -3040,7 +3084,7 @@ class Board extends Control:
 				"spell":
 					var col := Color(0.72, 0.86, 1.0, 1.0 - t)
 					for hx in f.hexes:              # AoE: light up the swept hexes
-						draw_colored_polygon(_hex_poly(_pix(hx), s - 3.0), Color(col.r, col.g, col.b, 0.35 * (1.0 - t)))
+						_fill_seen(hx, _hex_poly(_pix(hx), s - 3.0), Color(col.r, col.g, col.b, 0.35 * (1.0 - t)))
 					var c: Vector2 = _pix(f.to)
 					draw_polyline(_disc(c, s * (0.25 + 1.0 * t), true), col, 3.0)
 					draw_circle(c, s * 0.3 * (1.0 - t), Color(col.r, col.g, col.b, 0.5 * (1.0 - t)))
@@ -3369,6 +3413,16 @@ class Board extends Control:
 				f["pos"] = map.call(f["pos"])
 		_view_origin = _origin
 		_view_hex = hx
+		# #239: and the picture this layer painted is in the old view too. The
+		# figures (Figures3D._process) and the HP bars (main's HUD overlay) are
+		# placed every frame off _tok, so they followed the move at once; this
+		# layer only repaints when something queues it, and a view that moved
+		# inside a _layout() — the pan clamp, the board's rect settling, a zoom
+		# the follow-cam finished — queued nothing. What was left behind was
+		# every token's shadow disc and the active ring, still where the tokens
+		# USED to be: dark rings on empty tiles under nobody, and a gold ring
+		# with no one standing in it. Same family as #194 was for the ground.
+		queue_redraw()
 
 	func tick(dt: float) -> void:
 		if cb == null:
@@ -3470,6 +3524,7 @@ class Board extends Control:
 		var key := hash([main.hex_px, cb.board])
 		if key != _ground_key:
 			_ground_key = key
+			_covers_of = null   # #242: the same board change can move a shelf
 			_ground_at = _origin
 			_ground.queue_redraw()
 			queue_redraw()   # the tokens, marks and figures are in the new view too
@@ -3489,6 +3544,103 @@ class Board extends Control:
 
 	# #92: the reach of `v` from where `cur` stands. Range is the verb's own
 	# (a weapon's is the wielder's reach); a cone is everything it could sweep;
+	# #242: "height difference shows the overlap color, just keep the high and
+	# visible color". The ground is painted back to front (_paint_ground_at), so
+	# a raised tile covers the ground behind it. Everything painted on top of the
+	# ground each frame — the move field, a spell's reach, a zone, the dark, the
+	# rings — was not: it is drawn per hex, in board order, at the full size of
+	# the hex. So the wash of a low tile behind a shelf spilled up over the
+	# shelf's top face, and where that face had a wash of its own the two
+	# stacked into a third, deeper colour in a band across the step: the tile
+	# you can see, tinted by one you cannot. The fix is the ground's own rule —
+	# what is behind a raised tile is hidden by it — applied to the overlays:
+	# each is cut by the top faces of the higher tiles in front of it before it
+	# is drawn, so a hex's wash lands only on the part of it the player can see.
+	#
+	# Only a HIGHER tile in FRONT can cover a hex. One behind is painted first
+	# and drawn higher up the screen, away from it; one at the same height or
+	# lower has its top face beside or below this one's; and the cut earth under
+	# a shelf hangs off its front edges only, toward the row in front of it. So
+	# the top faces are the whole of what can hide a hex, and the list per hex
+	# is short — usually empty. Which hexes those are depends on the board
+	# alone, never on the pan or the zoom, so it is worked out once per board
+	# (and again whenever tick() sees the board change, the same key the ground
+	# repaints on). Flat boards have no list at all and draw exactly what they
+	# always drew.
+	var _covers := {}          # hex -> [hexes whose top face can hide part of it]
+	var _covers_of = null      # the board dictionary _covers was built for
+
+	func _covering(hx: Vector2i) -> Array:
+		if not is_same(_covers_of, cb.board):
+			_covers_of = cb.board
+			_covers = {}
+			var hs: Dictionary = cb.board.get("height", {})
+			var on := {}
+			for h in cb.board["hexes"]:
+				on[h] = true
+			var depth := func(h: Vector2i) -> float: return _iso(Hex.to_pixel(h, 1.0)).y
+			# From each raised tile outward, not from every hex inward: a board
+			# has a handful of raised tiles and a hundred-odd flat ones. A tile
+			# lifted h levels moves 0.9 h hex radii up the screen (RISE) and a
+			# row is about two radii deep, so h + 2 rings is past anything its
+			# top face can reach; anything it does not actually overlap is
+			# harmless in the list — the clip hands the polygon back whole.
+			for n in hs:
+				var hn: int = cb.height_at(n)
+				if hn <= 0 or not on.has(n):
+					continue
+				for a in Hex.within(n, hn + 2):
+					if on.has(a) and cb.height_at(a) < hn and depth.call(a) < depth.call(n):
+						if not _covers.has(a):
+							_covers[a] = []
+						_covers[a].append(n)
+		return _covers.get(hx, [])
+
+	# The parts of `poly` (drawn for hex `hx`) that no higher tile in front
+	# covers. [poly] itself on a flat board or an uncovered hex.
+	func _seen(hx: Vector2i, poly: PackedVector2Array) -> Array:
+		var over := _covering(hx)
+		if over.is_empty():
+			return [poly]
+		var out: Array = [poly]
+		for n in over:
+			var top := _hex_poly(_pix(n), main.hex_px)
+			var cut: Array = []
+			for p in out:
+				# Two hexes never nest, so clip_polygons hands back outlines
+				# only — no holes to draw around.
+				cut.append_array(Geometry2D.clip_polygons(p, top))
+			out = cut
+			if out.is_empty():
+				break
+		return out
+
+	# #242: draw_colored_polygon for a hex's overlay, cut to what is visible.
+	func _fill_seen(hx: Vector2i, poly: PackedVector2Array, col: Color) -> void:
+		for p in _seen(hx, poly):
+			draw_colored_polygon(p, col)
+
+	# ...and draw_polyline for a ring round a hex, the same way: a ring is a
+	# closed outline, so what survives the cut is one or more open runs of it.
+	func _ring_seen(hx: Vector2i, ring: PackedVector2Array, col: Color, w: float) -> void:
+		var runs: Array = [ring]
+		for n in _covering(hx):
+			var top := _hex_poly(_pix(n), main.hex_px)
+			var cut: Array = []
+			for r in runs:
+				cut.append_array(Geometry2D.clip_polyline_with_polygon(r, top))
+			runs = cut
+		for r in runs:
+			if r.size() >= 2:
+				draw_polyline(r, col, w, true)
+
+	# Whether a point on hex `hx` — its centre, where a glyph goes — is in view.
+	func _point_seen(hx: Vector2i, at: Vector2) -> bool:
+		for n in _covering(hx):
+			if Geometry2D.is_point_in_polygon(at, _hex_poly(_pix(n), main.hex_px)):
+				return false
+		return true
+
 	# an area spell is every hex it could be centred on. Targets ring in the
 	# side's colour — red for a foe, the party's green for an ally.
 	const COL_REACH := Color(0.95, 0.85, 0.45, 0.14)
@@ -3506,18 +3658,18 @@ class Board extends Control:
 				continue
 			if targeting in ["hex", "line"] and not cb.legal_area(cur, v, hx):
 				continue
-			draw_colored_polygon(_hex_poly(_pix(hx), s - 2.0), COL_REACH)
+			_fill_seen(hx, _hex_poly(_pix(hx), s - 2.0), COL_REACH)
 		if targeting in ["enemy", "ally"]:
 			var oc: Color = main.COL_TARGET if targeting == "enemy" else main.COL_PARTY
 			for c in cb.combatants:
 				if cb.legal_target(cur, v, c):
 					var poly := _hex_poly(_pix(c.pos), s - 3.0)
 					poly.append(poly[0])
-					draw_polyline(poly, Color(oc.r, oc.g, oc.b, 0.55), 2.0, true)
+					_ring_seen(c.pos, poly, Color(oc.r, oc.g, oc.b, 0.55), 2.0)
 		elif targeting == "self":
 			var poly := _hex_poly(_pix(cur.pos), s - 3.0)
 			poly.append(poly[0])
-			draw_polyline(poly, Color(main.COL_PARTY, 0.55), 2.0, true)
+			_ring_seen(cur.pos, poly, Color(main.COL_PARTY, 0.55), 2.0)
 
 	# HP bar + condition strip: identical for a sprite and for a vector token, so
 	# both paths call this rather than keeping two copies in step by hand.
@@ -4067,28 +4219,30 @@ class Board extends Control:
 			var obj: Dictionary = cb.object_at(hx)
 			if _is_hazard(obj):
 				_paint_tile(self, hx, c, s, pulse)   # its glow pulses, so it can't be cached
+			# #242: every wash and rim below goes through _fill_seen/_ring_seen,
+			# cut to the part of this hex a raised tile in front does not hide.
 			if night and not cb.lit(hx):   # #85: the dark, over everything the ground painted
-				draw_colored_polygon(_hex_poly(c, s), main.COL_NIGHT)
+				_fill_seen(hx, _hex_poly(c, s), main.COL_NIGHT)
 			if zone_tint.has(hx):
 				var zc: Color = zone_tint[hx]
-				draw_colored_polygon(poly, Color(zc.r, zc.g, zc.b, 0.30 + 0.06 * pulse))
+				_fill_seen(hx, poly, Color(zc.r, zc.g, zc.b, 0.30 + 0.06 * pulse))
 				var rim := _hex_poly(c, s - 3.0)
 				rim.append(rim[0])
-				draw_polyline(rim, Color(zc.r, zc.g, zc.b, 0.75), 1.5, true)
+				_ring_seen(hx, rim, Color(zc.r, zc.g, zc.b, 0.75), 1.5)
 			if field.has(hx) and hx != cur.pos:
-				draw_colored_polygon(poly, main.COL_MOVE)
+				_fill_seen(hx, poly, main.COL_MOVE)
 			if road.has(hx):
-				draw_colored_polygon(poly, main.COL_EXIT)
+				_fill_seen(hx, poly, main.COL_EXIT)
 			elif edge.has(hx):
 				# a pale rim on every edge hex, and the one under the hero filled
 				var erim := _hex_poly(c, s - 4.0)
 				erim.append(erim[0])
-				draw_polyline(erim, main.COL_EDGE, 2.0, true)
+				_ring_seen(hx, erim, main.COL_EDGE, 2.0)
 				if hx == cur.pos:
-					draw_colored_polygon(poly, Color(main.COL_EDGE, 0.30 + 0.12 * pulse))
+					_fill_seen(hx, poly, Color(main.COL_EDGE, 0.30 + 0.12 * pulse))
 			if cone_hexes.has(hx):
-				draw_colored_polygon(poly, main.COL_CONE)
-			if provoke.has(hx):
+				_fill_seen(hx, poly, main.COL_CONE)
+			if provoke.has(hx) and _point_seen(hx, c):
 				draw_string(ThemeDB.fallback_font, c - Vector2(6, -5), "⚠", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("ffcf47"))
 			if not obj.is_empty():
 				_draw_object(obj, c, s, pulse)
@@ -4111,7 +4265,7 @@ class Board extends Control:
 				var poly := _hex_poly(tp, s - 3.0)
 				poly.append(poly[0])
 				var oc: Color = main.COL_TARGET
-				draw_polyline(poly, oc if hot else Color(oc.r, oc.g, oc.b, 0.45), 3.0 if hot else 2.0, true)
+				_ring_seen(c.pos, poly, oc if hot else Color(oc.r, oc.g, oc.b, 0.45), 3.0 if hot else 2.0)
 		elif main._mode == "deploy":
 			# Who can be picked up, and who is held — the same hex-edge ring the
 			# targeting mode above uses, since it means the same thing: this hex
@@ -4124,14 +4278,14 @@ class Board extends Control:
 				var poly := _hex_poly(_pix(c.pos), s - 3.0)
 				poly.append(poly[0])
 				var oc: Color = main.COL_PARTY
-				draw_polyline(poly, oc if (held or hot) else Color(oc.r, oc.g, oc.b, 0.40),
-					3.5 if held else (3.0 if hot else 2.0), true)
+				_ring_seen(c.pos, poly, oc if (held or hot) else Color(oc.r, oc.g, oc.b, 0.40),
+					3.5 if held else (3.0 if hot else 2.0))
 		elif hero_turn and main._mode == "idle" and cur.econ["action"] > 0:
 			for f in cb.enemies_of(cur):
 				if cb.in_reach(cur, f):
 					var poly := _hex_poly(_pix(f.pos), s - 3.0)
 					poly.append(poly[0])
-					draw_polyline(poly, Color(main.COL_TARGET.r, main.COL_TARGET.g, main.COL_TARGET.b, 0.30), 1.5, true)
+					_ring_seen(f.pos, poly, Color(main.COL_TARGET.r, main.COL_TARGET.g, main.COL_TARGET.b, 0.30), 1.5)
 
 		# tokens, painted back-to-front so nearer ones overlap farther ones
 		# ...and not the ones who walked off the edge (the audit's 3.5): gone, not dead
