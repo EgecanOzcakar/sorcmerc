@@ -213,6 +213,10 @@ static func update(world, _delta := 0.0, asleep = null) -> void:
 	for p in world.parties:
 		if p.is_player:
 			continue
+		# #229: locked in a fight with another band (core/world_battle.gd) — no
+		# hunting, no patrol leg, no route planned off the budget until it is over.
+		if not world.clashes.is_empty() and not world.clash_of(p).is_empty():
+			continue
 		var dest = _break_off_step(world, p)
 		if dest == null:
 			dest = _flee_step(world, p)

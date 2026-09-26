@@ -60,7 +60,35 @@ const PALETTE := {
 	"reed": Color("6b7a45"), "gorse": Color("5c6b33"), "ice": Color("7f9aa8"),
 	"fire": Color("c8541f"), "cloth": Color("7a5a3a"), "bone": Color("cfc4a4"),
 	"water": Color("22333a"),
+	# #243: ash is burnt out, and burnt out is PALE — the grey-white of a cold
+	# hearth, not the black of the thing before it burned. It was `dark` here.
+	"ash": Color("8e877c"),
 }
+
+# #243: "ash model is too dark, it is mistaken as erroneous shadow". The Meshy
+# ash came down as a low mound textured almost black (its albedo averages
+# 0.157, the camp's floor 0.41 before the board darkens it), and a flat, dark,
+# soft-edged blob on the ground is exactly what a shadow looks like — the camp
+# board read as four holes in the ground with nobody standing over them. A
+# model's own colours are kept everywhere else; these are the ones lifted, by
+# multiplying the model's material. The factor is sRGB on an sRGB texture:
+# 3.0 was tried first and still read as a darker patch of the camp's dirt;
+# 4.6 takes the texture's mean to ~0.72, which under the board's sun and
+# ambient lands as the light grey of a cold hearth — lighter than the dirt
+# round it, which no shadow ever is.
+#
+# Lightness alone made it a grey pancake — a puddle, or a hole with the light
+# on. What says "object" is something standing ON it, so a burnt-out fire gets
+# what a burnt-out fire has: two charred logs across it and a few embers
+# (dressing() below). A glow on the mound itself was tried first — the texture
+# as an emission mask at 0.35 — and turned all four piles into orange discs,
+# which read as the campfire's hazard tile: a lie about the rules.
+const MODEL_TINT := {"ash": Color(4.6, 4.4, 4.0)}
+# Kinds whose model gets the kit's dressing laid over it (see dressing()).
+const DRESSED := ["ash"]
+# One lifted material per kind, shared by every hex of it on the board, the
+# same way the model itself is one cached scene.
+static var _lifted := {}
 
 # What a cover hex IS, per board palette. Cover is the one piece of terrain a
 # player has to read at a glance — tests/test_cover_readable.gd exists for
@@ -134,7 +162,9 @@ static func plan(kind: String, seed_v: int = 0) -> Array:
 		"tussock": _scrub(parts, rng, "reed", 0.40)
 		"gorse": _scrub(parts, rng, "gorse", 0.36)
 		"floe": _floe(parts, rng)
-		"ash": _scrub(parts, rng, "dark", 0.22)
+		"ash":
+			_scrub(parts, rng, "ash", 0.22)
+			parts.append_array(dressing(kind, seed_v))
 		"rubble": _rubble(parts, rng)
 		"torch": _torch(parts, rng)
 		"lamp": _lamp(parts, rng)
@@ -151,6 +181,8 @@ static func build(kind: String, seed_v: int = 0) -> Node3D:
 	if scene == null:
 		return kit
 	var m: Node3D = scene.instantiate()
+	if MODEL_TINT.has(kind):
+		_lift(m, kind)
 	var want := Props3D._bounds(kit)
 	kit.free()
 	var got := Props3D._bounds(m)
@@ -178,12 +210,38 @@ static func build(kind: String, seed_v: int = 0) -> Node3D:
 	# the kit's per-seed jitter was doing, one level up.
 	var holder := Node3D.new()
 	holder.add_child(m)
+	if kind in DRESSED:
+		holder.add_child(KitParts.assemble(dressing(kind, seed_v), PALETTE, "boardprop"))
 	holder.rotation.y = float(hash("prop/%s/%d" % [kind, seed_v]) % 360) * PI / 180.0
 	return holder
 
 
 static func triangles(kind: String) -> int:
 	return KitParts.triangles(plan(kind, 0))
+
+
+# #243: the model's own material, multiplied by MODEL_TINT, as a per-instance
+# override so the cached scene everyone else instantiates is never touched.
+# Duplicated once per kind and surface, not once per hex.
+static func _lift(m: Node3D, kind: String) -> void:
+	for mi in m.find_children("*", "MeshInstance3D", true, false):
+		var mesh: Mesh = (mi as MeshInstance3D).mesh
+		if mesh == null:
+			continue
+		for i in mesh.get_surface_count():
+			var key := "%s|%s|%d" % [kind, mesh.resource_path, i]
+			if not _lifted.has(key):
+				var src := (mi as MeshInstance3D).get_active_material(i) as BaseMaterial3D
+				if src == null:
+					_lifted[key] = null
+					continue
+				var mat := src.duplicate() as BaseMaterial3D
+				var tint: Color = MODEL_TINT[kind]
+				mat.albedo_color = Color(src.albedo_color.r * tint.r, src.albedo_color.g * tint.g,
+					src.albedo_color.b * tint.b, src.albedo_color.a)
+				_lifted[key] = mat
+			if _lifted[key] != null:
+				(mi as MeshInstance3D).set_surface_override_material(i, _lifted[key])
 
 
 static func _p(parts: Array, part: String, role: String, shade: int,
@@ -368,6 +426,33 @@ static func _scrub(parts: Array, rng: RandomNumberGenerator, role: String, h: fl
 			Vector3(cos(a) * (0.22 + r), h * 0.40 * (0.7 + 0.5 * rng.randf()), sin(a) * (0.22 + r)),
 			Vector3(w, h * (0.55 + 0.45 * rng.randf()), w * 0.85), rng.randf() * TAU,
 			deg_to_rad(_jit(rng, 18.0)))
+
+
+# #243: what lies on a burnt-out fire, laid over the ash whichever source drew
+# the mound — part of the kit's plan, and added on top of the model rather than
+# fitted inside it. Two charred logs lying across the pile and three embers
+# among them: a silhouette with edges and a warm point, which is the two things
+# a shadow never has. Everything sits at the mound's own height or just above
+# it (0.27 at the top, against test_board_props' 0.55 for rough), so it is
+# still ground you walk through and not something to hide behind.
+# Boxes, not posts and rocks: the mound's six clumps already spend 360 of the
+# kit's 420-triangle budget, and five boxes are the 60 left over.
+static func dressing(kind: String, seed_v: int) -> Array:
+	var parts: Array = []
+	if kind != "ash":
+		return parts
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("prop/dress/%s/%d" % [kind, seed_v])
+	var yaw: float = rng.randf() * TAU
+	for i in 2:
+		var a: float = yaw + PI * 0.5 * float(i) + _jit(rng, 0.35)
+		_p(parts, "box", "dark", i, Vector3(_jit(rng, 0.12), 0.21, _jit(rng, 0.12)),
+			Vector3(0.6 + _jit(rng, 0.06), 0.11, 0.12), a, deg_to_rad(_jit(rng, 6.0)))
+	for i in 3:
+		var a: float = TAU * float(i) / 3.0 + _jit(rng, 0.5)
+		_p(parts, "box", "fire", 2, Vector3(cos(a) * 0.2, 0.2, sin(a) * 0.2),
+			Vector3(0.09, 0.07, 0.09), rng.randf() * TAU)
+	return parts
 
 
 static func _rubble(parts: Array, rng: RandomNumberGenerator) -> void:

@@ -370,7 +370,7 @@ static func _nearest(world, spec: Dictionary, from: Vector2):
 		"lair":
 			pool = world.lairs.filter(func(l): return not l.looted)
 		"band":
-			var bands: Array = world.parties.filter(func(p): return not p.is_player and WorldAI.is_monster(p.faction) and String(p.ai.get("behavior", "")) != "raid")
+			var bands: Array = world.bands().filter(func(p): return not p.is_player and WorldAI.is_monster(p.faction) and String(p.ai.get("behavior", "")) != "raid")
 			if spec.has("factions"):
 				pool = bands.filter(func(p): return spec["factions"].has(p.faction))
 			else:
@@ -528,7 +528,7 @@ static func _fmt(text: String, name: String) -> String:
 	return text % (EnemyNames.upper_first(name) if text.begins_with("%s") else name)
 
 static func _target(world, c: Dictionary):
-	var pool: Array = {"landmark": world.landmarks, "lair": world.lairs, "band": world.parties,
+	var pool: Array = {"landmark": world.landmarks, "lair": world.lairs, "band": world.bands(),
 		"settlement": world.settlements}.get(String(c.get("target_kind", "")), [])
 	for x in pool:
 		if x.id == c["target_id"]:

@@ -17,6 +17,16 @@
 # sting to a sentence is how it stops playing the day the sentence is reworded.
 # core/audio.gd's statics are no-ops headless, like combat.gd's are.
 #
+# ON THE ROADS (#231 phase 2) nothing walks the map, so neither does a raid.
+# On a route world (world.routes set) the band does not march: it is pinned
+# (core/route_pins.gd) on the town's own road at its gate the moment it sets
+# out, standing its SIEGE there, undrawn — the town's label says it is there,
+# and a company walking out of that gate or up that road meets it. Turned
+# there, it is turned; left, the raid lands and the band goes home, off the
+# map at once. Everything after the landing — the halved market, the pull of
+# the raiders' people on the town's roads (core/route_encounters.gd reads
+# raided_by), the child lair, the lift — is the same town state as ever.
+#
 #   Raids.tick(world, now)          # -> [String]; sets out, advances, lands, lifts
 #   Raids.settle_cost(world, lair)  # -> gold, 0 when it cannot be settled
 #   Raids.settle(world, lair, party, now)   # a cleared lair becomes a camp settlement
@@ -31,6 +41,8 @@ const Ach = preload("res://core/achievements.gd")
 const Campaign = preload("res://core/campaign.gd")
 const Sound = preload("res://core/audio.gd")
 const Ladder = preload("res://core/ladder.gd")
+const RoutePins = preload("res://core/route_pins.gd")
+const WorldRoutes = preload("res://core/world_routes.gd")
 
 # How far a lair's raiders will walk: quest_posting.gd's clear_lair reach — a
 # lair a town would post work about is a lair that can reach it.
@@ -155,13 +167,11 @@ static func settlement_of(world, id: String):
 			return s
 	return null
 
+# Walking the map, or pinned at a gate on a route world (World.band looks in both).
 static func band_of(world, lair):
 	if lair.raid_band == "":
 		return null
-	for p in world.parties:
-		if p.id == lair.raid_band:
-			return p
-	return null
+	return world.band(lair.raid_band)
 
 # The band itself: two troops at the region's floor level, the shape the
 # procedural builder gives every band, pointed at the siege point.
@@ -176,7 +186,47 @@ static func set_out(world, lair, s, now: float):
 	WorldAI.raid(b, s.position + dir * SIEGE_DIST, s.id, lair.id)
 	lair.raid_band = b.id
 	lair.raid_at = now
+	if world.routes != null:
+		_stand_at_gate(world, b, s, dir, now)
 	return b
+
+# On the roads: straight to the siege, pinned SIEGE_DIST out along the town's
+# road that leaves most nearly toward the lair — inside BATTLE_RADIUS like the
+# walking band's stand, so the hold-the-line objective still applies. A town
+# with no road of its own (nothing a company could walk to) gets the nearest
+# point of any road.
+static func _stand_at_gate(world, b, s, dir: Vector2, now: float) -> void:
+	b.ai["phase"] = "siege"
+	b.ai["until"] = now + SIEGE
+	var node := WorldRoutes.poi_id("settlement", s.id)
+	var best := {}
+	var best_dot := -INF
+	for eid in world.routes.edges:
+		var e: Dictionary = world.routes.edges[eid]
+		if e["a"] != node and e["b"] != node:
+			continue
+		var pts: PackedVector2Array = e["points"]
+		if e["b"] == node:
+			pts = pts.duplicate()
+			pts.reverse()
+		var pt := _along(pts, minf(SIEGE_DIST, float(e["length"]) * 0.5))
+		var dot: float = (pt - s.position).normalized().dot(dir)
+		if best.is_empty() or dot > best_dot:
+			best_dot = dot
+			best = {"point": pt, "edge": eid}
+	if best.is_empty():
+		RoutePins.pin(world, b, "raid")
+	else:
+		RoutePins.place(world, b, best["point"], best["edge"], "raid")
+
+# The point `dist` along a polyline from its first point.
+static func _along(pts: PackedVector2Array, dist: float) -> Vector2:
+	for i in range(1, pts.size()):
+		var seg := pts[i - 1].distance_to(pts[i])
+		if dist <= seg:
+			return pts[i - 1].lerp(pts[i], dist / maxf(seg, 0.001))
+		dist -= seg
+	return pts[-1]
 
 # A band that can still be turned: out, and not yet landed.
 static func turnable(foe) -> bool:
@@ -263,7 +313,7 @@ static func tick(world, now: float) -> Array:
 			continue
 		var b = band_of(world, l)
 		if b != null and l.looted:
-			world.parties.erase(b)   # its lair is gone; it has nowhere to go home to
+			RoutePins.drop(world, b)   # its lair is gone; it has nowhere to go home to
 			b = null
 		if b == null:
 			l.raid_band = ""
@@ -290,7 +340,10 @@ static func tick(world, now: float) -> Array:
 			continue
 		raiding[l.id] = true
 		set_out(world, l, s, now)
-		lines.append("Raiders are out from %s, making for %s." % [l.sname, s.sname])
+		if world.routes != null:
+			lines.append("Raiders from %s are camped outside %s." % [l.sname, s.sname])
+		else:
+			lines.append("Raiders are out from %s, making for %s." % [l.sname, s.sname])
 		Sound.play_sfx("raid_horn")
 	return lines
 
@@ -320,6 +373,10 @@ static func _advance(world, lair, b, now: float, lines: Array) -> void:
 					lines.append_array(land(world, lair, s, now))
 				st["phase"] = "home"
 				st["to"] = lair.position
+				if RoutePins.is_pinned(b):
+					# On the roads it goes home off the map, at once: nothing walks there.
+					RoutePins.drop(world, b)
+					lair.raid_band = ""
 		"home":
 			if WorldAI.arrived(b):
 				world.parties.erase(b)
@@ -394,7 +451,7 @@ static func settle(world, lair, party, now: float):
 	# lift would erase it next poll, but the lair is leaving the map now.
 	var b = band_of(world, lair)
 	if b != null:
-		world.parties.erase(b)
+		RoutePins.drop(world, b)
 	world.lairs.erase(lair)
 	var s = world.add_settlement(World.Settlement.new("way-" + lair.id, lair.position, home.faction, "camp",
 		waystation_name(world, lair)))

@@ -6,6 +6,7 @@
 # Not a test, and not part of tools/run_tests.sh.
 #   SORCMERC_FAST=1 godot --headless --path . -s tests/sweep_site_knobs.gd
 #   SEEDS=5 LEVEL=0 godot ... -s tests/sweep_site_knobs.gd
+#   POLICY=rest LEVEL=2 godot ... -s tests/sweep_site_knobs.gd   # one policy only
 #
 # tests/sweep_site_depth.gd answers a per-ROOM question (of the parties that
 # reached room d, how many won it). This answers the per-DELVE one a player
@@ -23,7 +24,10 @@
 #   rest   take a rest room whenever one is offered, else the first way on
 #   fight  always the first way on — core/site.gd makes it a fight — never rest
 #
-# Its table is in core/site.gd's header, under REST_SHARE.
+# Its table is in core/site.gd's header, under REST_SHARE. Since 2026-09-25 a
+# Heartland lair is laid out on its band's own pair (Site.BAND_SUPPORT), and
+# the lair here stands at the Heartland's anchor, so the pair the header line
+# prints is the band's; that table is under BAND_SUPPORT.
 extends SceneTree
 
 const AI = preload("res://core/ai.gd")
@@ -38,10 +42,12 @@ const Scaler = preload("res://core/scaler.gd")
 func _init() -> void:
 	var seeds := int(OS.get_environment("SEEDS")) if OS.get_environment("SEEDS") != "" else 14
 	var extra := int(OS.get_environment("LEVEL")) if OS.get_environment("LEVEL") != "" else 0
-	print("MAX_DEPTH %d  SUPPORT_CHANCE %.2f  REST_SHARE %.2f  level %d  %d seeds x %d factions" % [
-		Site.MAX_DEPTH, Site.SUPPORT_CHANCE, Site.REST_SHARE, 3 + extra, seeds, Scaler.FACTIONS.size()])
+	var knobs: Array = Site.support_for(Site.band_for(World.Lair.new("probe", Vector2.ZERO, "beast"), _world()))
+	print("MAX_DEPTH %d  support %.2f  rest share %.2f (the Heartland's)  level %d  %d seeds x %d factions" % [
+		Site.MAX_DEPTH, float(knobs[0]), float(knobs[1]), 3 + extra, seeds, Scaler.FACTIONS.size()])
 	print("  policy  delves  cleared  wiped  fights  rests  boss-reached  hp@boss  slots@boss  boss-won")
-	for policy in ["rest", "fight"]:
+	var policies: Array = ["rest", "fight"] if OS.get_environment("POLICY") == "" else [OS.get_environment("POLICY")]
+	for policy in policies:
 		var t := {"n": 0, "cleared": 0, "wiped": 0, "fights": 0, "rests": 0, "boss": 0, "hp": 0.0, "slots": 0.0, "boss_won": 0,
 			"depth": {}}
 		for f in Scaler.FACTIONS:

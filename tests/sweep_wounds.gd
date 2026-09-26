@@ -4,6 +4,8 @@
 #   SORCMERC_FAST=1 godot --headless --path . -s tests/sweep_wounds.gd
 #   PART=grid HPS=1.0,0.5 SCALES=1.0,0.6 SEEDS=100 godot ... -s tests/sweep_wounds.gd
 #   PART=curve LEVEL=8 godot ... -s tests/sweep_wounds.gd
+#   PART=home LEVEL=8 HPS=0.5 godot ... -s tests/sweep_wounds.gd
+#   PART=home FLOORS=0.39,0.55 HURT=0.9 SLOTS=spent godot ... -s tests/sweep_wounds.gd
 #
 # world_threat.gd's header carried a grid taken 2026-09-13 with a throwaway
 # harness that was never committed, under TIER easy 0.96 / CURVE 0.90, before
@@ -24,9 +26,19 @@
 #               (WorldThreat.power_scale), with every slot back and with every
 #               slot spent (WorldThreat.assess, slot_hold and all): what a
 #               player pressing on actually meets.
+#   PART=home   the walk home from a site (core/world_road_home.gd, added
+#               2026-09-25): win% by hp for a company fresh out of a lair, on
+#               the walk-home curve, beside the same company NOT walking home.
+#               WorldThreat.assess with a world whose road-home clock runs, so
+#               the column is exactly what world.gd builds. FLOORS / HURT price
+#               candidate walk-home knobs through WorldThreat.curve instead
+#               (the road's own column is then left out); SLOTS=spent|back|both
+#               (default spent: the walk home is the drained company's).
 #
-# Its tables (grid, and the curve master against the 2026-09-25 retune) are in
-# core/world_threat.gd's header and the build log, "The measured pass".
+# Its tables (grid, the curve master against the 2026-09-25 retune, and the
+# walk home under WALK_HOME_FLOOR) are in
+# core/world_threat.gd's header and the build log, "The measured pass" and
+# "The road home".
 extends SceneTree
 
 const AI = preload("res://core/ai.gd")
@@ -36,6 +48,8 @@ const Party = preload("res://core/party.gd")
 const Presets = preload("res://core/presets.gd")
 const Scaler = preload("res://core/scaler.gd")
 const WorldThreat = preload("res://core/world_threat.gd")
+const World = preload("res://core/world.gd")
+const WorldRoadHome = preload("res://core/world_road_home.gd")
 
 func _init() -> void:
 	var seeds := _env_i("SEEDS", 200)
@@ -56,6 +70,8 @@ func _init() -> void:
 				var r := _sweep(p.party_characters(), float(sc), seeds)
 				line += "  %5.1f%%" % r["rate"]
 			print(line)
+	elif part == "home":
+		_home(level, hps, seeds)
 	else:
 		print("level-%d presets, the shipped curve (HURT_AT %.2f, floor %.2f, x%.2f fresh), %d seeds a cell" % [
 			level, WorldThreat.HURT_AT, WorldThreat.SCALE_FLOOR, WorldThreat.SCALE_MAX, seeds])
@@ -71,6 +87,48 @@ func _init() -> void:
 				int(round(hp * 100)), float(t["power_scale"]), a["foes"], a["rate"], a["rounds"],
 				float(t2["power_scale"]), b["foes"], b["rate"]])
 	quit(0)
+
+# The walk home. Shipped knobs: the road's column (clock off) beside the walk
+# home's (clock on), both through WorldThreat.assess. Candidate knobs (FLOORS
+# set): one column per floor, the scale built by WorldThreat.curve times the
+# company's slot_hold, exactly as assess composes it.
+func _home(level: int, hps: Array, seeds: int) -> void:
+	var slots := OS.get_environment("SLOTS") if OS.get_environment("SLOTS") != "" else "spent"
+	var kinds: Array = [true, false] if slots == "both" else [slots != "back"]
+	var floors: Array = _env_f("FLOORS", [])
+	var hurt: float = float(OS.get_environment("HURT")) if OS.get_environment("HURT") != "" else WorldThreat.WALK_HOME_HURT_AT
+	var w := World.new()
+	WorldRoadHome.set_out(w)
+	for spent in kinds:
+		if floors.is_empty():
+			print("level-%d presets, walk home (HURT_AT %.2f, floor %.2f) against the road, every slot %s, %d seeds a cell" % [
+				level, WorldThreat.WALK_HOME_HURT_AT, WorldThreat.WALK_HOME_FLOOR, "spent" if spent else "back", seeds])
+			print("  hp%    road: scale   win%   | walk home: scale   win%")
+			for hp in hps:
+				var p := _party(level, hp, spent)
+				var road := WorldThreat.assess(p)
+				var home := WorldThreat.assess(p, w)
+				var a := _sweep(p.party_characters(), float(road["power_scale"]), seeds)
+				var b := _sweep(p.party_characters(), float(home["power_scale"]), seeds)
+				print("  %3d%%        x%.3f  %5.1f%%   |            x%.3f  %5.1f%%" % [
+					int(round(hp * 100)), float(road["power_scale"]), a["rate"], float(home["power_scale"]), b["rate"]])
+		else:
+			print("level-%d presets, candidate walk-home floors at HURT_AT %.2f, every slot %s, %d seeds a cell" % [
+				level, hurt, "spent" if spent else "back", seeds])
+			var head := "  hp%  "
+			for f in floors:
+				head += "   floor %.2f      " % float(f)
+			print(head)
+			for hp in hps:
+				var p := _party(level, hp, spent)
+				var hold := WorldThreat.slot_hold(p)
+				var frac := WorldThreat.party_hp_frac(p)
+				var line := "  %3d%% " % int(round(hp * 100))
+				for f in floors:
+					var sc: float = WorldThreat.curve(frac, hurt, float(f)) * hold
+					var r := _sweep(p.party_characters(), sc, seeds)
+					line += "   x%.3f %5.1f%%  " % [sc, r["rate"]]
+				print(line)
 
 func _env_i(k: String, d: int) -> int:
 	return int(OS.get_environment(k)) if OS.get_environment(k) != "" else d

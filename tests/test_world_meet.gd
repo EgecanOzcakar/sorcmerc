@@ -181,6 +181,30 @@ func _init() -> void:
 	check(main._approach_card != null, "a hostile band in reach still opens the card by itself")
 	check(main._approach_card != null and ways(main).has("engage"), "...the hostile one")
 	main._close_approach()
+	w.parties.erase(gobs)
+
+	# --- #229: a band locked in a clash is met by nobody until it is over ---
+	var watch = w.add_party(World.RoamingParty.new("watch-clash", p.position + Vector2(10, 0), "human"))
+	watch.ai = {}
+	watch.goal = watch.position
+	var wolves = w.add_party(World.RoamingParty.new("wolves-clash", p.position + Vector2(12, 0), "beast"))
+	wolves.ai = {}
+	wolves.goal = wolves.position
+	main._layout()
+	check(main._band_at(main._pix(watch.position)) == watch, "setup: before the clash, its figure is clickable")
+	w.clashes.append({"a": watch.id, "b": wolves.id, "winner": watch.id, "outcome": "Defeat",
+		"rounds": 3, "at": (watch.position + wolves.position) * 0.5,
+		"from": clock.elapsed, "until": clock.elapsed + 99999.0})
+	check(main._band_at(main._pix(watch.position)) == null,
+		"#229: a band in a clash is not a figure to click — a click there is ground")
+	await step(main, 5)
+	check(main._approach_card == null, "#229: a hostile band in a clash, in reach, opens no card")
+	main._meet(wolves, true)
+	check(main._approach_card == null and "locked in a fight" in String(main._camp_msg.text),
+		"#229: a march that reaches one stops with a line: %s" % main._camp_msg.text)
+	w.clashes.clear()
+	w.parties.erase(wolves)
+	w.parties.erase(watch)
 
 	main.queue_free()
 	print("test_world_meet: %d passed, %d failed" % [_pass, _fail])

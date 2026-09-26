@@ -5,14 +5,16 @@
 # answers one question — *given the party's condition, how hard should a
 # wilderness encounter be?* — and answers it as the two arguments Scaler wants:
 #
-#   var t := WorldThreat.assess(party)
+#   var t := WorldThreat.assess(party, world)   # world: optional, the road home's clock
 #   var spec := Scaler.roster_for(party.party_characters(), t["difficulty"],
 #       {}, theme, seed_v, t["power_scale"])
 #
 # assess() returns {difficulty, power_scale, hp_frac, slot_hold, counted}: the
 # first two are the call above, the rest are there so the caller can say *why*
-# in a log line or a tooltip. Pure math on a Party — no scenes, no RNG, no world
-# state.
+# in a log line or a tooltip. Pure math on a Party — no scenes, no RNG. The one
+# piece of world state it reads is core/world_road_home.gd's clock, through
+# assess(party, world): a company fresh out of a site reads its wounds on the
+# gentler WALK_HOME curve until dawn or a long rest (2026-09-25, below).
 #
 # WOUNDS THIN A FIGHT; SPENT SLOTS DO NOT (the owner's call, 2026-09-24). The
 # budget Scaler builds is priced off core/rules/power.gd's reading of the party,
@@ -44,6 +46,7 @@ extends RefCounted
 
 const Regions = preload("res://core/regions.gd")
 const Scaler = preload("res://core/scaler.gd")
+const WorldRoadHome = preload("res://core/world_road_home.gd")
 
 # Sites are the hard content now. Open country is the walk between them — the
 # thing that used to be "normal" for every wilderness fight in world.gd, which
@@ -103,6 +106,8 @@ const BASELINE := "easy"
 # cast wins a road fight about half the time. That is the gamble the owner
 # asked for, and the approach card's other three answers (slip past, parley,
 # ambush) are how a hurt company avoids taking it.
+# (2026-09-25: the owner kept this curve and gave the walk home out of a site
+# its own gentler floor instead — WALK_HOME_FLOOR below.)
 
 # The flat part, and the user's own ask: open-world bands are some percent
 # easier than the tier alone, always. Measured 99.0% at full HP (level 3,
@@ -131,6 +136,51 @@ const CONDITION_FLOOR := 0.80
 const SCALE_MAX := WILDERNESS_SCALE
 const SCALE_FLOOR := WILDERNESS_SCALE * CONDITION_FLOOR
 
+# THE WALK HOME — MEASURED 2026-09-25 (tests/sweep_wounds.gd, PART=home), the
+# owner's call on the measured pass's Still open (build log "The road home").
+# The column above to watch was the walk home from a lair: a level-8 company
+# at half HP with no slots won 47.5% of road fights. The owner kept the curve
+# and asked for a gentler floor while core/world_road_home.gd's clock runs
+# (out of a site, until dawn or a long rest), aimed at "hard" (75%) for that
+# company, with the same company NOT fresh from a site left where it is.
+#
+# Same shape as the road's curve, two knobs of its own: the discount starts at
+# the first scratch again (HURT_AT 0.90, the pre-retune value) and bottoms out
+# lower. The candidates, level-8 presets, every slot spent, 200 seeds a cell,
+# fight seed pinned (FLOORS=0.39,0.5,0.6):
+#
+#     hp%      floor 0.39      floor 0.50      floor 0.60
+#     70%    x1.37  80.0%    x1.41  76.5%    x1.44  77.0%
+#     50%    x1.16  85.0%    x1.23  79.0%    x1.30  71.5%
+#     30%    x0.93  87.5%    x1.05  80.5%    x1.16  67.0%
+#
+# 0.39 is the old floor and gives back nearly all of the risk (85%, what
+# master had before the retune); 0.60 misses the line. 0.50 lands on it with a
+# margin: the shipped constants, the road and the walk home side by side
+# (WorldThreat.assess, clock off and on), every slot spent, master 2662712's
+# road column measured back to back (46.0% at level 8, half HP):
+#
+#                 road                  walk home
+#     hp%      scale   win%          scale   win%
+#   level 3
+#     100%    x1.29   95.0%         x1.29   95.0%
+#      70%    x1.29   85.0%         x1.15   87.5%
+#      50%    x1.29   73.0%         x1.01   91.0%
+#      30%    x1.18   63.0%         x0.85   90.0%
+#   level 8
+#     100%    x1.58   79.0%         x1.58   79.0%
+#      70%    x1.58   59.0%         x1.41   76.5%
+#      50%    x1.58   46.0%         x1.23   79.0%   <- the target: >= 75%
+#      30%    x1.45   37.5%         x1.05   80.5%
+#
+# The spent slots are still held (slot_hold is untouched, so a slot spent
+# never buys the easier fight — the walk reads wounds, and only wounds), and
+# at full HP the two columns are the same fight. Level 3 comes out gentler
+# than level 8 because its slot_hold is smaller; the target was set on the
+# harder of the two.
+const WALK_HOME_HURT_AT := 0.90
+const WALK_HOME_FLOOR := 0.50
+
 # What the party's condition is worth as a budget multiplier, flat discount
 # included — this is the number that goes to Scaler.roster_for(). Linear from
 # WILDERNESS_SCALE at HURT_AT down to WILDERNESS_SCALE * CONDITION_FLOOR at zero
@@ -141,9 +191,23 @@ const SCALE_FLOOR := WILDERNESS_SCALE * CONDITION_FLOOR
 # never above 1.0, so the wilderness can never be made harsher here. It is no
 # longer exactly 1.0 for a fresh party — that is the point of WILDERNESS_SCALE,
 # and it is a deliberate change from this file's first version.
-static func power_scale(hp_frac: float) -> float:
-	var t: float = clampf(hp_frac, 0.0, HURT_AT) / HURT_AT
-	return clampf(WILDERNESS_SCALE * lerpf(CONDITION_FLOOR, 1.0, t), SCALE_FLOOR, SCALE_MAX)
+#
+# `walking_home` is core/world_road_home.gd's clock: a company fresh out of a
+# site reads its wounds on the WALK_HOME curve below instead, which is never
+# harsher than this one at any HP (the min() holds that whatever the two
+# constants are later cut to).
+static func power_scale(hp_frac: float, walking_home := false) -> float:
+	var road := curve(hp_frac, HURT_AT, CONDITION_FLOOR)
+	if not walking_home:
+		return road
+	return minf(road, curve(hp_frac, WALK_HOME_HURT_AT, WALK_HOME_FLOOR))
+
+# The shape both curves share, with its two knobs as arguments so that
+# tests/sweep_wounds.gd's PART=home can price a candidate floor without a copy
+# of the tree. Nothing in the game passes anything but this file's constants.
+static func curve(hp_frac: float, hurt_at: float, floor_v: float) -> float:
+	var t: float = clampf(hp_frac, 0.0, hurt_at) / hurt_at
+	return clampf(WILDERNESS_SCALE * lerpf(floor_v, 1.0, t), WILDERNESS_SCALE * floor_v, SCALE_MAX)
 
 # Pooled current/max HP over the active party — total hit points left, not the
 # average of per-member fractions, because the pool is what actually has to
@@ -192,8 +256,14 @@ static func slot_hold(party) -> float:
 # pooled from, so a caller can tell "full strength" from "nobody to read".
 # `power_scale` is the condition curve times slot_hold(): callers pass it
 # through untouched and get both.
-static func assess(party) -> Dictionary:
+#
+# `world` is optional and read for one thing only: whether the company is on
+# the road home from a site (core/world_road_home.gd). Without it — a test, a
+# linear run, the raid's wave builder — the answer is the road's own curve.
+# `walking_home` is in the result so the caller can say why a fight was thin.
+static func assess(party, world = null) -> Dictionary:
 	var frac := party_hp_frac(party)
+	var home: bool = WorldRoadHome.active(world, party)
 	var counted := 0
 	for id in party.active:
 		var ch = party.get_member(id)
@@ -202,8 +272,9 @@ static func assess(party) -> Dictionary:
 	var hold := slot_hold(party)
 	return {
 		"difficulty": BASELINE,
-		"power_scale": power_scale(frac) * hold,
+		"power_scale": power_scale(frac, home) * hold,
 		"hp_frac": frac,
 		"slot_hold": hold,
 		"counted": counted,
+		"walking_home": home,
 	}
