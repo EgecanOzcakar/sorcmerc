@@ -88,7 +88,7 @@ const BANDS := [
 		"blurb": "Past the last waystone. What lives here has never been taxed."},
 	{"id": "deeps", "label": "the Far Deeps", "upto": 0.94, "levels": [10, 14],
 		"blurb": "Old ground, and old things on it. Nothing out here is anybody's problem but yours."},
-	{"id": "unmapped", "label": "the Unmapped", "upto": 999.0, "levels": [15, 20], "part_of": "deeps",
+	{"id": "unmapped", "label": "the Unmapped", "upto": 999.0, "levels": [15, 20], "under": 17, "part_of": "deeps",
 		"blurb": "Past anywhere with a name. The maps stop here because the people drawing them did."},
 ]
 
@@ -104,6 +104,21 @@ const BANDS := [
 #
 # The split sits at the equal-area point of the old ring (sqrt((0.87^2+1)/2) =
 # 0.937): each half of the Far Deeps is an eighth of the map.
+#
+# `under` is the Unmapped's own wall (the Deeps' teeth, 2026-09-25, the owner's
+# call on the split's Still open): a party under a band's floor meets that
+# band's fight at its floor level everywhere else, and at level 17 here. The
+# plain pin made the Unmapped a step, not a wall — level 15 content is x1.47 of
+# a level 10 party where level 6 content is x2.26 of a level 3 one, so one band
+# out won 71.5% here and 28.0% at the frontier's seam. The outer band is the
+# map's last and its far edge; it should be the place a level 10 company can
+# see and cannot yet work, and the owner's target was 40-50% for exactly that
+# party at easy. A higher floor could not do it without leaving 15 and 16
+# nobody's levels, so the floor stays 15 — a party that has reached it fights
+# its own level there — and only what an under-levelled party meets moves.
+# MEASURED (tests/sweep_regions.gd, 200 seeds, easy, fight seed pinned, BIG=0), a level
+# 10 party against a plain pin at: 15 71.0%, 17 48.5%, 18 29.5%, 19 27.5%. The
+# table with the wall in place is the last one below.
 #
 # `part_of` is what keeps the split from being a rename. The Far Deeps are still
 # ONE COUNTRY — the fourth of four (countries(), country_of()) — and "deeps"
@@ -244,14 +259,24 @@ static func party_level(party) -> int:
 static func level_here(world, pos: Vector2, party) -> int:
 	var band: Dictionary = at(world, pos)
 	var lv: Array = band["levels"]
-	return clampi(party_level(party), int(lv[0]), int(lv[1]))
+	var have: int = party_level(party)
+	if have < int(lv[0]):
+		return under_level(band)
+	return clampi(have, int(lv[0]), int(lv[1]))
+
+# The level a party UNDER this band meets: its floor, except where the band
+# names an `under` of its own (the Unmapped, see BANDS).
+static func under_level(band: Dictionary) -> int:
+	var lv: Array = band.get("levels", [1, 1])
+	return int(band.get("under", lv[0]))
 
 
 # The budget knob the band implies, as a multiplier on core/scaler.gd's own
 # budget — 1.0 whenever the party is already inside the band, which is the
 # common case and costs nothing.
 #
-# Outside the band the fight is PINNED to the band's own edge: the budget comes
+# Outside the band the fight is PINNED to the band's own edge (below the
+# Unmapped, to its `under` level — see BANDS): the budget comes
 # out as scaler's budget for the ruler party at level_here(), whatever this
 # party's build is. _budget() is REF_SCORE * (team/REF_SCORE)^CURVE * TIER *
 # power_scale, so Scaler.held_at(ref_score(L), fresh) lands it on ref_score(L)
@@ -290,12 +315,18 @@ static func power_scale(world, pos: Vector2, party) -> float:
 # a caller pricing many points against one party (core/world_flee.gd gauges
 # every band on the map), where re-pricing the party per point is the cost.
 static func scale_for(world, pos: Vector2, have: int, fresh: float) -> float:
-	var lv: Array = at(world, pos)["levels"]
+	return scale_in(at(world, pos), have, fresh)
+
+# scale_for with the band already read — the one place the pin is worked out,
+# so tests/sweep_regions.gd prices a band's fight the way the map does.
+# A party under the band meets its `under` level's fight (under_level()).
+static func scale_in(band: Dictionary, have: int, fresh: float) -> float:
+	var lv: Array = band["levels"]
 	var lo: int = int(lv[0])
 	var hi: int = int(lv[1])
 	var target := 0.0
 	if have < lo:
-		target = ref_score(lo)
+		target = ref_score(under_level(band))
 	elif have > hi or fresh > ref_score(hi):
 		target = ref_score(hi)
 	else:
@@ -534,6 +565,40 @@ static func fight_xp(level: int) -> int:
 # easy roster fields a CR 11+ creature 6 times, a level 20 party's hard roster
 # 20 times, and the rest of the time spends the same budget on four to eight
 # smaller things. NO KNOB MOVED.
+#
+# RE-MEASURED 2026-09-25 for the Deeps' teeth: the Unmapped's `under` wall (17)
+# and core/scaler.gd's big one (every cell now passes the band its content
+# stands in, so rows with content 10+ roll it). tests/sweep_regions.gd, 200
+# seeds a cell, tier easy, fight seed pinned, back to back on master (9dcc57e)
+# and the branch. The last three rows are band cells (Regions.scale_in), which
+# master's sweep has no way to express; the 10/15 row is what a level 10 party
+# at the Unmapped met on master.
+#
+#   party  content    scale   master   branch
+#   lvl 3   lvl 3     x1.00    96.5%    96.5%
+#   lvl 5   lvl 5     x1.00    97.5%    97.5%
+#   lvl 6   lvl 6     x1.00    99.0%    99.0%
+#   lvl 8   lvl 8     x1.00    97.0%    97.0%
+#   lvl 10  lvl 10    x1.00    96.5%    96.5%
+#   lvl 12  lvl 12    x1.00    99.0%    99.0%
+#   lvl 15  lvl 15    x1.00    94.0%    94.5%
+#   lvl 6   lvl 3     x0.44     100%     100%
+#   lvl 10  lvl 3     x0.30     100%     100%
+#   lvl 3   lvl 6     x2.26    29.0%    29.0%
+#   lvl 3   lvl 10    x3.38     2.0%     2.0%
+#   lvl 10  lvl 15    x1.47    71.0%    70.5%
+#   lvl 12  lvl 15    x1.22    86.0%    86.0%
+#   lvl 15  lvl 14    x0.95    97.5%    97.5%
+#   lvl 20  lvl 14    x0.67     100%     100%
+#   lvl 3   lvl 15    x4.97     0.0%     0.0%
+#   lvl 10  unmapped  x1.68      -      48.0%   <- was 10/15, 71.0%: the wall
+#   lvl 12  unmapped  x1.40      -      77.5%   <- was 12/15, 86.0%
+#   lvl 14  unmapped  x1.21      -      88.0%
+#
+# No inner row moved more than half a point. One band out into the Unmapped at
+# level 10 is 48.0% (the owner's 40-50%), still well above the frontier's 29.0%
+# at level 3 — the last band is a wall a level 10 company can see over, not one
+# a level 3 company walks into.
 
 # --- placement, for the world builders ------------------------------------
 

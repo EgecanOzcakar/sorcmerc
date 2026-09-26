@@ -4,10 +4,53 @@ extends RefCounted
 var id: String
 var src_id: String   # monsters.json id this was spawned from ("" for heroes)
 var cname: String
-var short := ""   # what the initiative bar shows; "" = the first word of cname
+var short := ""   # what the initiative bar shows; "" = worked out from cname (short_name)
 
+# What the initiative bar calls this one. A hero, and a foe with a name of its
+# own ("Grix the Goblin", a caster's "Maren the Cult Fanatic"), is its first
+# word, as it always was. A creature known only by its kind used to be too, and
+# a kind's first word is usually its least useful one: an adult red dragon read
+# "Adult" on the bar, a giant rat "Giant" (the same word the hill giant beside
+# it would have read, had it not read "Hill"), a wererat "Wererat,". So a kind
+# is shortened by species_short() instead.
 func short_name() -> String:
-	return short if short != "" else cname.split(" ")[0]
+	if short != "":
+		return short
+	if src_id == "" or " the " in cname:
+		return cname.split(" ")[0]
+	return species_short(cname)
+
+# The words in front of a kind that say how old or how big it is, not what it
+# is, taken from data/bestiary.json's names. Dropped only while another word
+# follows, so a creature called just "Giant" keeps it.
+const AGE_WORDS := ["Young", "Adult", "Ancient", "Elder", "Greater", "Lesser", "Giant", "Dire"]
+# The most a kind's short name holds before it falls back to its last two words,
+# then its last — the noun. Sized to hold every dragon's colour ("Silver
+# Dragon", 13) and no more: the strip's tiles grow with their labels, and a
+# fight can field eight foes.
+const SHORT_MAX := 13
+
+# "Adult Red Dragon" -> "Red Dragon", "Giant Rat (Diseased)" -> "Rat",
+# "Wererat, Human Form" -> "Wererat", "Giant Poisonous Snake 2" -> "Snake",
+# "Hill Giant Archer" -> "Giant Archer", "Hill Giant" -> "Hill Giant". The copy
+# number goes (the bar never showed it), and so does anything after a comma or
+# in brackets.
+static func species_short(name: String) -> String:
+	var base: String = name.get_slice("(", 0).get_slice(",", 0).strip_edges()
+	var words: Array = Array(base.split(" ", false))
+	if words.size() > 1 and String(words[-1]).is_valid_int():
+		words.pop_back()
+	while words.size() > 1 and String(words[0]) in AGE_WORDS:
+		words.pop_front()
+	if words.is_empty():
+		return name.split(" ")[0]
+	var whole: String = " ".join(PackedStringArray(words))
+	if whole.length() <= SHORT_MAX:
+		return whole
+	# ...the last two only when they are a name ("Giant Archer"), never "of Wasps"
+	var two: bool = words.size() > 2 and String(words[-2]) != String(words[-2]).to_lower()
+	var tail: String = "%s %s" % [words[-2], words[-1]] if two else ""
+	return tail if tail != "" and tail.length() <= SHORT_MAX else String(words[-1])
 var team: String  # "party" | "foe"
 
 var ac: int
