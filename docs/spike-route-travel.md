@@ -352,13 +352,24 @@ they get their sweep.
   What it left for later is in its build log entry: the taste-number sweep,
   raids and bounty jobs (phase 2), the minimap's roads, roads as ground
   decals, and co-op.
-- **Phase 2 — routes by default.** Authored bands (`world.json` `parties[]`,
-  story `spawn_party`, a `hunt_party` job's target) become pinned encounters
-  on their edges; raids become the town state plus the pull; `WorldBands`,
-  `WorldAI`'s hunt, `WorldBattle`, `WorldFlee`, `WorldChase` and
-  click-to-meet retire; old saves drop their bands and re-pin their jobs. The
-  mod API keeps its vocabulary (`sorcmerc-compat`), with an optional
-  `routes` block in `world.json` for a pack that wants to draw its own roads.
+- **Phase 2 — route worlds complete, still behind the flag. Landed
+  2026-09-26** (`core/route_pins.gd`, build log
+  `docs/plan/2026-09-26-route-travel-phase2.md`). The owner's call: finish
+  route worlds before making them the default, and keep free roam as an
+  opt-out. A band something names is **pinned**: it stands at one point of a
+  road, undrawn, and is met when the company walks past it — a town's bounty
+  (the towns on settled ground price one band each on their roads, and the
+  boards post them as `hunt_party` jobs, marked on the road), a story's
+  `spawn_party`, and a pack's `world.json` `parties[]` when a pack's map is
+  born with the flag. A raid is the town state plus the pull, with its band
+  pinned at the town's gate for its siege instead of walking there. The mod
+  API's vocabulary is unchanged (`sorcmerc-compat`).
+- **Phase 2b — routes by default.** Flip the flag's default, with free roam
+  kept as an opt-out. When it is gone for good: `WorldBands`, `WorldAI`'s
+  hunt, `WorldBattle`, `WorldFlee`, `WorldChase` and click-to-meet retire; a
+  free-roaming save adopted into routes pins its named bands and drops the
+  rest (`RouteTravel.adopt(world, true)` already does the pinning), and an
+  optional `routes` block in `world.json` lets a pack draw its own roads.
 - **Phase 3 — #232 and #234.** A met band's card grows past fight / parley /
   slip / ambush into what a road meeting can be (trade, news, tribute, an
   escort job); D3's road events stop resolving themselves and ask, two or
@@ -394,6 +405,10 @@ Asked at the end of the spike, answered the same day. What each one changed:
 7. **A new trail is shown at once or not by the outcome that opens it**
    (`open_route(…, known)`, §3.1, phase 3).
 8. **Next is phase 1, behind the flag** (§6).
+9. **Phase 2 completes route worlds first** — raids, bounties, a story's and a
+   pack's bands — still behind the flag; routes by default is its own PR
+   after (§6, phase 2b).
+10. **Free roam stays, as an opt-out**, for now.
 
 Nothing is open. Phase 3 will need its own calls on what a meeting and a road
 event can offer, and those belong to #232 and #234.
