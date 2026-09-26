@@ -1758,15 +1758,18 @@ func encounter_spec(foe, difficulty := "") -> Dictionary:
 	if theme == "":
 		seed_v = Scaler.pin_faction(seed_v, faction)
 	var threat: Dictionary = WorldThreat.assess(party)
+	var band_id := String(Regions.at(world, foe.position)["id"])
 	# D6: the two knobs compose, and they answer different questions. The band
 	# says how dangerous this country is (1.0 while the party is inside its level
 	# range, which is the common case); the party's condition still thins whatever
-	# the country sends, in the same proportion it always did.
+	# the country sends, in the same proportion it always did. The band's id rides
+	# along too: this country's casters, and the Far Deeps' big one
+	# (Scaler.BIG_CHANCE), which changes what the fight is made of, not its price.
 	var spec: Dictionary = Scaler.roster_for(
 		party.party_characters(), difficulty if difficulty != "" else String(threat["difficulty"]),
 		{}, theme, seed_v,
 		float(threat["power_scale"]) * Regions.power_scale(world, foe.position, party), [], habitat,
-		EnemyCasters.cap_for_band(String(Regions.at(world, foe.position)["id"])))   # this country's casters
+		EnemyCasters.cap_for_band(band_id), band_id)
 	spec["theme"] = theme if theme != "" else String(Scaler.BIOME_BOARD.get(biome, DEFAULT_THEME))
 	# What this band is worth robbing for. A caravan is carrying its cargo; a
 	# patrol, a warband and a beast pack are carrying what they stand up in.

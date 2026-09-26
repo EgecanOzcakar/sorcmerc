@@ -371,14 +371,99 @@ static func forget_pools() -> void:
 # does not know what ground it is on is unaffected.
 static func roster_for(party_characters: Array, difficulty: String, quest_bias: Dictionary = {},
 		theme: String = "", seed: int = 0, power_scale: float = 1.0, exclude: Array = [],
-		habitat: String = "", caster_cap: int = 0) -> Dictionary:
+		habitat: String = "", caster_cap: int = 0, band: String = "") -> Dictionary:
 	var budget := _budget(party_characters, difficulty, power_scale)
 	if not quest_bias.is_empty():
 		return _build(budget, _order(quest_bias))
 	var order: Array = _faction_order(theme, seed, budget, exclude, habitat)
 	var elite := _caster_elite(order, seed, budget, exclude, party_characters.size(),
 		caster_cap if caster_cap > 0 else _cap_for(party_characters))
-	return elite if not elite.is_empty() else _build(budget, order)
+	if not elite.is_empty():
+		return elite
+	var big := _big_one(order, seed, budget, exclude, _habitat_for(theme, habitat), band)
+	return big if not big.is_empty() else _build(budget, order)
+
+# --- the Deeps' big one (2026-09-25) ----------------------------------------
+#
+# The Far Deeps were given 26 statblocks at CR 11-20 the same day (the build
+# log's 2026-09-25-far-deeps entry) and they almost never reached a roster:
+# _build() buys bodies first, and BIGGEST_SHARE keeps any one foe under 0.6 of
+# the budget, so an adult dragon (priced 159-197 on core/rules/power.gd's
+# ruler) never fit a Deeps road budget (easy: 103 at level 10, 151 at 15, 213
+# at 20). A CR 11+ creature was 3-10% of Deeps fights.
+#
+# So a road fight in a band named in BIG_CHANCE sometimes IS one: the roll is
+# seeded off the fight's own seed (a reload meets the same creature), the pick
+# is seeded among the warband faction's CR BIG_CR+ entries that the MULT knob
+# can bring to BIG_SHARE of the budget, and it stands alone at the first
+# MULT_STEP that gets there — an adult dragon at the bottom of the Deeps is a
+# lean one, a vampire at the top a greater one. Nothing is added: the budget is
+# the same budget, and this changes what a fight is made of, not its price.
+#
+# BIG_SHARE is where "the same price" is measured rather than assumed. The
+# ruler does not price a lone big creature against three bodies' worth of
+# action economy the way it plays: forced on, 200 pinned seeds a point, tier
+# hard, the Deeps' own roaming mix, against the same seeds' warbands (level 12
+# in the Deeps 73.5%, level 17 in the Unmapped 63.5%):
+#   BIG_SHARE 0.60  89.0%  91.5%      (a solo creature at 0.6 of the budget is soft)
+#             0.75  79.0%  79.5%
+#             0.80  70.0%  71.5%      <- shipped: -3.5 / +8.0 on the fights it touches
+#             0.85  62.5%  57.5%
+#             1.00  42.5%    -        (pumped to the whole budget it is a wall)
+# That is the rate with the roll FORCED on every fight that can field one (50-74%
+# of them); at the shipped BIG_CHANCE a third of fights, so the road moves by
+# about a third of that — inside noise at hard, and nothing at easy.
+#
+# BIG_CHANCE per band, MEASURED the same day at easy (tests/sweep_deeps_big.gd,
+# its table is in docs/plan/2026-09-25-deeps-teeth.md): a CR 11+ creature in
+# 29.5 / 34.0 / 35.0% of inner-Deeps fights at levels 10 / 12 / 14 and 26.5 /
+# 33.5 / 32.5% of the Unmapped's at 15 / 17 / 20 — the owner's 25-35%. The two
+# chances differ because the Unmapped's budgets can already hold more big
+# statblocks (the iron golem from level 17) and its warbands field a vampire
+# 8-11% of the time on their own. The ceiling is the mix: a quarter of the Far
+# Deeps' roaming bands are fey, who have nothing at CR 11+.
+#
+# A band with no entry (every band outside the Far Deeps), a quest roster, a
+# faction with no CR 11+ entry and a budget no big creature can be brought to
+# all come back {} and build exactly as before, so test_scaler's lines and
+# every other band's measured numbers are byte-identical. core/site.gd's lair
+# rooms pass no band: a lair has its own lead, and none has been swept at its
+# country's level yet.
+const BIG_CR := 11.0
+const BIG_CHANCE := {"deeps": 0.6, "unmapped": 0.37}
+const BIG_SHARE := 0.8
+# Sweeps pin the roll: 0.0 never, 1.0 always (in a band BIG_CHANCE names), < 0
+# the shipped chance.
+static var big_chance_override := -1.0
+
+static func big_rolls(band: String, seed: int) -> bool:
+	if not BIG_CHANCE.has(band):
+		return false
+	var p: float = big_chance_override if big_chance_override >= 0.0 else float(BIG_CHANCE[band])
+	return absi(hash("big|%d" % seed)) % 1000 < int(round(p * 1000.0))
+
+static func _big_one(order: Array, seed: int, budget: float, exclude: Array, need_habitat: String,
+		band: String) -> Dictionary:
+	if order.is_empty() or order == MIX or not big_rolls(band, seed):
+		return {}
+	var fac := String(Catalog.monster(String(order[0])).get("faction", ""))
+	var target: float = budget * BIG_SHARE
+	var fits: Array = []
+	for e in _faction_pool(fac):
+		if float(e["cr"]) < BIG_CR or e["id"] in exclude:
+			continue
+		if need_habitat != "" and not String(e["habitat"]) in [need_habitat, "any"]:
+			continue
+		var id := String(e["id"])
+		if _lead_score(id, 1, MULT_MIN, []) <= target and _lead_score(id, 1, MULT_MAX, []) >= target:
+			fits.append(id)
+	if fits.is_empty():
+		return {}
+	var pick: String = fits[absi(hash("big-pick|%d" % seed)) % fits.size()]
+	var mult := MULT_MIN
+	while mult < MULT_MAX and _lead_score(pick, 1, mult, []) < target:
+		mult += MULT_STEP
+	return {"monsters": [{"id": pick, "count": 1, "mult": snappedf(minf(mult, MULT_MAX), 0.01)}]}
 
 # --- the caster elite (2026-09-24) ------------------------------------------
 #
@@ -628,7 +713,7 @@ static func _faction_order(theme: String, seed: int, budget: float, exclude: Arr
 		habitat: String = "") -> Array:
 	# The ground first: it decides which factions can field anything here, so it
 	# has to be known before the faction is picked. See _viable_faction.
-	var need_habitat: String = habitat if habitat != "" else String(THEME_HABITAT.get(theme, ""))
+	var need_habitat: String = _habitat_for(theme, habitat)
 	var fac: String = String(THEME_FACTION.get(theme, "")) if THEME_FACTION.has(theme) \
 		else _viable_faction(seed, budget, need_habitat, exclude)
 	if fac == "":
@@ -649,6 +734,11 @@ static func _faction_order(theme: String, seed: int, budget: float, exclude: Arr
 	for i in mini(ROSTER_KINDS, pool.size()):
 		out.append(pool[(start + i) % pool.size()]["id"])
 	return out
+
+# The habitat a roster is filtered to: the ground's when the caller knows it,
+# else the theme's own (THEME_HABITAT), else none.
+static func _habitat_for(theme: String, habitat: String) -> String:
+	return habitat if habitat != "" else String(THEME_HABITAT.get(theme, ""))
 
 # One faction's entries that are small enough for this budget and at home on
 # this ground. Split out of _faction_order because _viable_faction has to ask
@@ -709,7 +799,7 @@ static func _faction_pool(fac: String) -> Array:
 			var c = Encounter.spawn(m["id"], 1.0, "foe", Vector2i.ZERO)
 			if c != null:
 				out.append({"id": m["id"], "score": Power.estimate(c)["score"],
-					"habitat": m.get("habitat", "any")})
+					"habitat": m.get("habitat", "any"), "cr": float(m.get("cr", 0.0))})
 		out.sort_custom(func(a, b): return float(a["score"]) > float(b["score"]))
 		_fac_cache[fac] = out
 	return _fac_cache[fac]
