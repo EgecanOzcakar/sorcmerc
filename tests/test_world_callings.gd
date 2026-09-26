@@ -6,6 +6,14 @@
 # its own the moment the outcome card is down — or the visit it was done at
 # is left, which is where a past told at the inn of the very town it names
 # is done. The fire that has nobody left to tell says something else.
+#
+# This file drives the free plane (SORCMERC_ROUTES=0, the opt-out); its road
+# twin, tests/test_world_callings_routes.gd, extends it and overrides the
+# hooks below (_routes, _the_shrine, _walk_to_shrine, _walk_into, _stand_band,
+# _open_fight) — the steps a route world does differently: a told shrine is
+# reached by the way the telling opens to it, a town by a march, a band met on
+# the road. The checklist is not copied, so the two cannot drift apart. The
+# defaults here are the code they replaced, word for word.
 #   SORCMERC_FAST=1 godot --headless --path . -s tests/test_world_callings.gd
 extends SceneTree
 
@@ -18,6 +26,7 @@ const Visit = preload("res://core/settlement_visit.gd")
 const EnemyNames = preload("res://core/enemy_names.gd")
 const WorldCamp = preload("res://core/world_camp.gd")
 const RNG = preload("res://core/rng.gd")
+const RouteTravel = preload("res://core/route_travel.gd")
 
 const AMULET := "amulet-of-proof-against-detection-and-location"
 
@@ -75,11 +84,42 @@ func _clear_road(main) -> void:
 func _quiet_night(main) -> void:
 	var here: Vector2 = main.world.player().position
 	_clear_road(main)
-	while WorldCamp.ambush_roll(RNG.new(WorldCamp.camp_seed(main.world.clock.elapsed, here))):
+	# The odds the screen rolls here: the stretch of road's, on a route world.
+	var pct: int = RouteTravel.camp_ambush_pct(main.world, here) if RouteTravel.on(main.world) else WorldCamp.AMBUSH_CHANCE_PCT
+	while WorldCamp.ambush_roll(RNG.new(WorldCamp.camp_seed(main.world.clock.elapsed, here)), pct):
 		main.world.clock.elapsed += 1.0
 
+# --- the steps a route world does differently (tests/test_world_callings_routes.gd) ---
+
+func _routes() -> bool:
+	return false
+
+# The one shrine the acolyte can be handed: every shrine on the map spent, and
+# one of the test's own out past VISION_RADIUS.
+func _the_shrine(w):
+	for l in w.landmarks:
+		if l.kind == "shrine":
+			l.spent = true
+	# Out past VISION_RADIUS and clear of every beacon and the lake: hidden until told.
+	return w.add_landmark(World.Landmark.new("t-shrine", "shrine", Vector2(80, -300)))
+
+func _walk_to_shrine(main, shrine) -> void:
+	main.world.player().position = shrine.position
+	for i in 3:
+		await process_frame
+
+func _walk_into(main, town) -> void:
+	main.world.player().position = town.position
+	main._open_visit(town)
+
+# A band the soldier's past names, where the company can meet it.
+func _stand_band(main, band) -> void:
+	band.position = main.world.player().position + Vector2(10, 0)
+	main.world.parties.append(band)
+
 func _init() -> void:
-	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
+	# "0" is the free plane, where bands walk the map (#231: routes are the default)
+	OS.set_environment("SORCMERC_ROUTES", "1" if _routes() else "0")
 	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/%d-%d" % [OS.get_process_id(), randi()])
 	var main = load("res://scenes/world/world.tscn").instantiate()
 	root.add_child(main)
@@ -97,16 +137,13 @@ func _init() -> void:
 	for id in party.active:
 		party.get_member(id).background_id = {hero.id: "acolyte", mate.id: "charlatan"}.get(id, "")
 	party.callings.clear()
-	for l in w.landmarks:
-		if l.kind == "shrine":
-			l.spent = true
-	# Out past VISION_RADIUS and clear of every beacon and the lake: hidden until told.
-	var shrine = w.add_landmark(World.Landmark.new("t-shrine", "shrine", Vector2(80, -300)))
+	var shrine = _the_shrine(w)
 	for i in 10:
 		await process_frame
+	check(RouteTravel.on(w) == _routes(), "the map is the kind this tour is for")
 
 	# --- assigned on the map, untold ---
-	check(party.callings.has(hero.id) and party.callings[hero.id]["target_id"] == "t-shrine"
+	check(party.callings.has(hero.id) and party.callings[hero.id]["target_id"] == shrine.id
 		and party.callings[hero.id]["state"] == "", "the acolyte is handed the shrine the frame the map is up")
 	var town = w.settlements.filter(func(s): return s.id == "greenmarch")[0]
 	check(party.callings.has(mate.id) and party.callings[mate.id]["target_id"] == town.id, "the charlatan is handed the town")
@@ -143,9 +180,7 @@ func _init() -> void:
 	await process_frame
 
 	# --- done on the road: the row answered, the outcome acked, then the resolution ---
-	p.position = shrine.position
-	for i in 3:
-		await process_frame
+	await _walk_to_shrine(main, shrine)
 	main.party.gold = 500
 	main._open_place(shrine)
 	await process_frame
@@ -191,8 +226,7 @@ func _init() -> void:
 	# --- the inn's fire tells the second hero, in the very town her past names:
 	# the gate was walked before she spoke, so the rest asks again, and the
 	# card waits for the visit to close ---
-	p.position = town.position
-	main._open_visit(town)
+	await _walk_into(main, town)
 	await process_frame
 	check(not main._visit.is_empty() and main._calling_queue.is_empty() and party.callings[mate.id]["state"] == "",
 		"walking in untold does nothing")
@@ -246,7 +280,7 @@ func _init() -> void:
 	var third = party.get_member(String(party.active[2]))
 	third.background_id = "soldier"
 	var band = World.RoamingParty.new("t-deserters", p.position + Vector2(10, 0), "bandit")
-	w.parties.append(band)
+	await _stand_band(main, band)
 	party.callings[third.id] = {"id": "soldier", "target_kind": "band", "target_id": band.id,
 		"state": "told", "told_at": w.clock.elapsed}
 	check(await _open_fight(main, band), "the band fight opened")
@@ -262,7 +296,7 @@ func _init() -> void:
 	third.dead = false
 	party.activate(third.id)
 	var band2 = World.RoamingParty.new("t-deserters-2", p.position + Vector2(10, 0), "bandit")
-	w.parties.append(band2)
+	await _stand_band(main, band2)
 	party.callings[third.id]["target_id"] = band2.id
 	var xp_was: int = third.xp
 	check(await _open_fight(main, band2), "the rematch opened")
@@ -276,7 +310,7 @@ func _init() -> void:
 	main._close_spoils()
 	await process_frame
 
-	print("test_world_callings: %d passed, %d failed" % [_pass, _fail])
+	print("%s: %d passed, %d failed" % ["test_world_callings_routes" if _routes() else "test_world_callings", _pass, _fail])
 	quit(1 if _fail > 0 else 0)
 
 # The world screen's own fight hand-off, driven the way tests/test_world_

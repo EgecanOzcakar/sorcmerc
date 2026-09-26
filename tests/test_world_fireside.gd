@@ -4,6 +4,16 @@
 # player and reported on a card of its own. The plain night is still there
 # when the fire has nothing to say, and the inn asks the same question over
 # the visit without letting go of its clock.
+#
+# Run twice, once per kind of map (#231): on the free plane (SORCMERC_ROUTES=0,
+# the opt-out it was written for) and on the roads (the default). The fire is
+# the same fire. On the roads the camp is made on the road where the map sets
+# the company down (a camp may be made anywhere on a road, the owner's call),
+# and its night is as risky as that stretch — so the quiet minute is searched
+# for at RouteTravel.camp_ambush_pct, the odds the screen rolls there; and the
+# inn is walked into by a click on the town (tests/road_screen.gd), since a
+# route world opens a town only at the end of a march. The second visit opens
+# at the gate the company is already standing at, as on the free plane.
 #   SORCMERC_FAST=1 godot --headless --path . -s tests/test_world_fireside.gd
 extends SceneTree
 
@@ -11,13 +21,16 @@ const PartyOpinion = preload("res://core/party_opinion.gd")
 const Visit = preload("res://core/settlement_visit.gd")
 const WorldCamp = preload("res://core/world_camp.gd")
 const RNG = preload("res://core/rng.gd")
+const RouteTravel = preload("res://core/route_travel.gd")
+const RoadScreen = preload("res://tests/road_screen.gd")
 
 var _pass := 0
 var _fail := 0
+var _mode := ""
 
 func check(cond: bool, label: String) -> void:
 	if cond: _pass += 1
-	else: _fail += 1; printerr("  FAIL: ", label)
+	else: _fail += 1; printerr("  FAIL: ", _mode, label)
 
 func _set_all(party, v: float) -> void:
 	for p in PartyOpinion.active_pairs(party):
@@ -57,16 +70,27 @@ func _quiet_night(main) -> void:
 	for q in main.world.parties.duplicate():
 		if not q.is_player and q.position.distance_to(here) < 300.0:
 			main.world.parties.erase(q)
-	while WorldCamp.ambush_roll(RNG.new(WorldCamp.camp_seed(main.world.clock.elapsed, here))):
+	# The odds the screen rolls here: the stretch of road's, on a route world.
+	var pct: int = RouteTravel.camp_ambush_pct(main.world, here) if RouteTravel.on(main.world) else WorldCamp.AMBUSH_CHANCE_PCT
+	while WorldCamp.ambush_roll(RNG.new(WorldCamp.camp_seed(main.world.clock.elapsed, here)), pct):
 		main.world.clock.elapsed += 1.0
 
 func _init() -> void:
-	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
 	OS.set_environment("SORCMERC_SAVE_DIR", "user://test/%d-%d" % [OS.get_process_id(), randi()])
+	await _run(false)
+	await _run(true)
+	print("test_world_fireside: %d passed, %d failed" % [_pass, _fail])
+	quit(1 if _fail > 0 else 0)
+
+func _run(routes: bool) -> void:
+	# "0" is the free plane, where bands walk the map (#231: routes are the default)
+	OS.set_environment("SORCMERC_ROUTES", "1" if routes else "0")
+	_mode = "[roads] " if routes else "[free plane] "
 	var main = load("res://scenes/world/world.tscn").instantiate()
 	root.add_child(main)
 	for i in 10:
 		await process_frame
+	check(RouteTravel.on(main.world) == routes, "the map is the kind this pass is for")
 	var party = main.party
 
 	# --- warming / quarrel: the moment is on the night's card ---
@@ -154,8 +178,12 @@ func _init() -> void:
 
 	# --- the inn: the same fire, over the visit, and the visit keeps its clock ---
 	var home = main.world.settlements[0]
-	main.world.player().position = home.position
-	main._open_visit(home)
+	if routes:
+		var got: String = await RoadScreen.go(self, main, home.position)
+		check(got == "visit" and main._visit.get("settlement") == home, "a click on the town marches to its inn (%s)" % got)
+	else:
+		main.world.player().position = home.position
+		main._open_visit(home)
 	_set_all(party, 30.0)
 	fired = false
 	for i in 30:
@@ -218,6 +246,5 @@ func _init() -> void:
 		check(not main.world.clock.is_paused(), "acking after Leave does not leave the map paused")
 		check(main._pause_btn.text == "Pause", "...and the pause button says so, not stuck on Resume")
 	main._close_visit()
-
-	print("test_world_fireside: %d passed, %d failed" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
+	main.queue_free()
+	await process_frame

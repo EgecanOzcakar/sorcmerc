@@ -1,6 +1,9 @@
 # Raids on the world screen: the band sets out and it is said, the siege shows
 # on the label, the landing shows on the board, clearing lifts it, and a
 # cleared lair can be settled from the lair button row.
+# The free plane (SORCMERC_ROUTES=0), where the band walks to the gate. On the
+# roads it is pinned at the gate the moment it sets out —
+# tests/test_world_raids_routes.gd.
 #   SORCMERC_FAST=1 godot --headless --path . -s tests/test_world_raids.gd
 extends SceneTree
 

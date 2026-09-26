@@ -1,5 +1,7 @@
 # Landmarks on the world screen: found by walking, a button to visit, the
 # approach card asks, the event card answers, and a spent place is quiet.
+# The free plane (SORCMERC_ROUTES=0): found by walking up to it. On the roads a
+# landmark is found by its path instead — tests/test_world_landmarks_routes.gd.
 #   SORCMERC_FAST=1 godot --headless --path . -s tests/test_world_landmarks.gd
 extends SceneTree
 const World = preload("res://core/world.gd")

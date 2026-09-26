@@ -8,8 +8,18 @@
 # fits in eight lines.
 #
 # Measures the real panels the real screen builds.
+#
+# Run twice, once per kind of map (#231): on the free plane (SORCMERC_ROUTES=0,
+# the opt-out it was written for) and on the roads (the default). The panels
+# are the same panels; what differs is how the company gets into the town whose
+# pages are measured — stood on its gate on the free plane, marched there by a
+# click on the town on the roads (tests/road_screen.gd), because a route world
+# opens a town only at the end of a march — and so the road the party screen
+# is locked on is, on the roads, the road itself.
 #   godot --headless --path . -s tests/test_world_panels.gd
 extends SceneTree
+
+const RoadScreen = preload("res://tests/road_screen.gd")
 
 const Quest = preload("res://core/quest.gd")
 const RNG = preload("res://core/rng.gd")
@@ -18,10 +28,11 @@ const Bench = preload("res://core/bench.gd")   # the owner's call of 2026-09-25:
 
 var _pass := 0
 var _fail := 0
+var _mode := ""
 
 func check(cond: bool, label: String) -> void:
 	if cond: _pass += 1
-	else: _fail += 1; printerr("  FAIL: ", label)
+	else: _fail += 1; printerr("  FAIL: ", _mode, label)
 
 func labels(node: Node) -> Array:
 	var out: Array = []
@@ -69,7 +80,15 @@ func panels(node: Node) -> Array:
 	return out
 
 func _init() -> void:
-	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
+	await _run(false)
+	await _run(true)
+	print("test_world_panels: %d passed, %d failed" % [_pass, _fail])
+	quit(1 if _fail > 0 else 0)
+
+func _run(routes: bool) -> void:
+	# "0" is the free plane, where bands walk the map (#231: routes are the default)
+	OS.set_environment("SORCMERC_ROUTES", "1" if routes else "0")
+	_mode = "[roads] " if routes else "[free plane] "
 	var main = load("res://scenes/world/world.tscn").instantiate()
 	root.add_child(main)
 	for i in 10:
@@ -122,8 +141,13 @@ func _init() -> void:
 
 	# The settlement's own two lists are built the same way, and were not.
 	var s0 = main.world.settlements[0]
-	main.world.player().position = s0.position
-	main._check_visit()
+	check(main.world.routes != null if routes else main.world.routes == null, "the map is the kind this pass is for")
+	if routes:
+		var got: String = await RoadScreen.go(self, main, s0.position)
+		check(got == "visit" and main._visit.get("settlement") == s0, "a click on the town marches there and opens it (%s)" % got)
+	else:
+		main.world.player().position = s0.position
+		main._check_visit()
 	await process_frame
 	check(not main._visit.is_empty(), "a settlement opens")
 	for page in ["market", "board"]:
@@ -263,8 +287,8 @@ func _init() -> void:
 	main.spectator = false
 
 	await _level_up_announcement(main)
-	print("test_world_panels: %d passed, %d failed" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
+	main.queue_free()
+	await process_frame
 
 # Issue #118: a level used to arrive as one chime and a number two screens
 # away. It gets the after-action page's own treatment now — the map stops, a

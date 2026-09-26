@@ -5,15 +5,25 @@
 # way to pause was the button in the corner.
 #
 # Drives the real scene and feeds it real InputEventKeys.
+#
+# Run twice, once per kind of map (#231): on the free plane (SORCMERC_ROUTES=0,
+# the opt-out it was written for) and on the roads (the default). The keys are
+# the same keys on both; what differs is the one step that gets the company
+# into a town — on the free plane it is stood on the gate, on the roads the
+# town is clicked and the company marches there by road (tests/road_screen.gd),
+# because a route world opens a town only at the end of a march.
 #   godot --headless --path . -s tests/test_world_menu.gd
 extends SceneTree
 
+const RoadScreen = preload("res://tests/road_screen.gd")
+
 var _pass := 0
 var _fail := 0
+var _mode := ""
 
 func check(cond: bool, label: String) -> void:
 	if cond: _pass += 1
-	else: _fail += 1; printerr("  FAIL: ", label)
+	else: _fail += 1; printerr("  FAIL: ", _mode, label)
 
 func buttons(node: Node) -> Array:
 	var out: Array = []
@@ -43,7 +53,15 @@ func key(main, code: int) -> void:
 	main._unhandled_key_input(ev)
 
 func _init() -> void:
-	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
+	await _run(false)
+	await _run(true)
+	print("test_world_menu: %d passed, %d failed" % [_pass, _fail])
+	quit(1 if _fail > 0 else 0)
+
+func _run(routes: bool) -> void:
+	# "0" is the free plane, where bands walk the map (#231: routes are the default)
+	OS.set_environment("SORCMERC_ROUTES", "1" if routes else "0")
+	_mode = "[roads] " if routes else "[free plane] "
 	var main = load("res://scenes/world/world.tscn").instantiate()
 	root.add_child(main)
 	for i in 10:
@@ -119,8 +137,13 @@ func _init() -> void:
 
 	# --- and stays out of the settlement's way ---------------------------
 	var s = main.world.settlements[0]
-	main.world.player().position = s.position
-	main._check_visit()
+	check(main.world.routes != null if routes else main.world.routes == null, "the map is the kind this pass is for")
+	if routes:
+		var got: String = await RoadScreen.go(self, main, s.position)
+		check(got == "visit" and main._visit.get("settlement") == s, "a click on the town marches there and opens it (%s)" % got)
+	else:
+		main.world.player().position = s.position
+		main._check_visit()
 	await process_frame
 	check(not main._visit.is_empty(), "a visit opens")
 	key(main, KEY_SPACE)
@@ -129,6 +152,5 @@ func _init() -> void:
 	await process_frame
 	check(main._visit.is_empty(), "Esc still leaves the settlement")
 	check(main._menu_panel == null, "...and does not open the menu on the way out")
-
-	print("test_world_menu: %d passed, %d failed" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
+	main.queue_free()
+	await process_frame

@@ -4,6 +4,10 @@
 # if it is already in reach. A hostile band still closes and forces the card.
 # A band that outruns the party is run down on a roll or gets away
 # (core/world_chase.gd).
+# Free-plane only (SORCMERC_ROUTES=0), all of it: on the roads nothing walks the
+# map, so there is no figure to click, follow or run down and no clash; the
+# road's meeting — a band walked up to on the road — is
+# tests/test_world_meet_routes.gd.
 #   godot --headless --path . -s tests/test_world_meet.gd
 extends SceneTree
 const World = preload("res://core/world.gd")

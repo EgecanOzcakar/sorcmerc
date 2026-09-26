@@ -6,26 +6,51 @@
 # every earlier fight's, and come back only the paid way (a healer's raise,
 # Revivify, a scroll). The road applies the fight's deaths BEFORE the retreat,
 # the same order a site wipe always used, so neither path can revive them.
+#
+# Run twice, once per kind of map (#231): on the free plane (SORCMERC_ROUTES=0,
+# the opt-out it was written for) and on the roads (the default). The costs of
+# a loss are the same on both. The lost fight is not met the same way: on the
+# free plane a band is stood beside the company by a town and closes on it; on
+# the roads nothing walks up to anybody, so the band is pinned on the road
+# ahead (core/route_pins.gd, the way a bounty or a story's band stands there)
+# and the company marches into it through the real click (tests/road_screen.gd)
+# — the road's own traffic met on the way is waved off. After the loss the
+# victors are not left on the map: a pinned band goes back to its spot on the
+# road, held there until the company has walked clear, which is why its card
+# does not reopen over the beaten company in the town it came to in.
 #   godot --headless --path . -s tests/test_world_defeat.gd
 extends SceneTree
 
 var _pass := 0
 var _fail := 0
+var _mode := ""
 
 func check(cond: bool, label: String) -> void:
 	if cond: _pass += 1
-	else: _fail += 1; printerr("  FAIL: ", label)
+	else: _fail += 1; printerr("  FAIL: ", _mode, label)
 
 const Defeat = preload("res://core/defeat.gd")
 const WorldSave = preload("res://core/world_save.gd")
+const WorldAI = preload("res://core/world_ai.gd")
+const RouteTravel = preload("res://core/route_travel.gd")
+const RoadScreen = preload("res://tests/road_screen.gd")
 
 func _init() -> void:
-	OS.set_environment("SORCMERC_ROUTES", "0")   # the free plane, where bands walk the map (#231: routes are the default)
+	await _run(false)
+	await _run(true)
+	print("test_world_defeat: %d passed, %d failed" % [_pass, _fail])
+	quit(1 if _fail > 0 else 0)
+
+func _run(routes: bool) -> void:
+	# "0" is the free plane, where bands walk the map (#231: routes are the default)
+	OS.set_environment("SORCMERC_ROUTES", "1" if routes else "0")
+	_mode = "[roads] " if routes else "[free plane] "
 	var main = load("res://scenes/world/world.tscn").instantiate()
 	root.add_child(main)
 	for i in 10:
 		await process_frame
 
+	check(RouteTravel.on(main.world) == routes, "the map is the kind this pass is for")
 	main.party.gold = 100
 	var id: String = main.party.roster[0].id
 	check(not main.party.roster[0].dead, "sanity: nobody's dead yet")
@@ -49,6 +74,9 @@ func _init() -> void:
 		or main.world.settlements.any(func(s): return s.position == main.world.player().position),
 		"the party falls back to a real settlement")
 	check(main._lair_msg.text.contains("beaten"), "...and the map says so (%s)" % main._lair_msg.text)
+	if routes:
+		check(float(main.world.routes.locate(main.world.player().position, true)["distance"]) < 0.5,
+			"...and on the roads it comes to on a road, at the town's gate")
 	# The design audit §1.8: a cost the strongroom cannot shelter. A day passes
 	# through the world's own tick, and the downed roll for a wound.
 	check(is_equal_approx(main.world.clock.elapsed - t_before, Defeat.DAYS_LOST * Defeat.DAY),
@@ -62,11 +90,15 @@ func _init() -> void:
 	# The whole thing, lost against a band standing right by that settlement:
 	# the map must NOT come back with the same fight/parley/ambush card the
 	# party just answered — the band is marked slipped until it is out of range.
-	var World = load("res://core/world.gd")
 	var p = main.world.player()
-	p.position = main.world.settlements[0].position + Vector2(10, 0)
-	var foe = main.world.add_party(World.RoamingParty.new("hound", p.position + Vector2(1, 0), "goblinoid"))
-	main._process(0.1); await process_frame
+	var foe = null
+	if routes:
+		foe = await _meet_on_the_road(main)
+	else:
+		var World = load("res://core/world.gd")
+		p.position = main.world.settlements[0].position + Vector2(10, 0)
+		foe = main.world.add_party(World.RoamingParty.new("hound", p.position + Vector2(1, 0), "goblinoid"))
+		main._process(0.1); await process_frame
 	check(main._approach_card != null, "sanity: a hostile band next to the party opens the approach card")
 	# Whichever band the card is for: the earlier retreat's lost day lets the
 	# map's own bands walk up to the town too, so it need not be the hound.
@@ -98,6 +130,12 @@ func _init() -> void:
 	# the victors' truce, so it does not come straight back for them.
 	check(main._slipped.has(met.id) and load("res://core/world_ai.gd").in_truce(met, main.world.clock.elapsed),
 		"it is marked slipped instead, and holds off under a truce")
+	if routes:
+		check(main.world.pinned.has(met) and not main.world.parties.has(met),
+			"on the roads the victors go back to their spot on the road, off the map")
+		for i in 5:
+			main._process(0.1); await process_frame
+		check(main._approach_card == null, "...held there: the beaten company is not asked again")
 
 	# A death in a fight the party WON is not touched by _retreat() at all:
 	# the same paid-resurrection stakes as a loss.
@@ -124,6 +162,24 @@ func _init() -> void:
 	var saved = WorldSave.load_latest()
 	check(saved != null and not saved["party"].finished.is_empty(), "the save is marked finished")
 	check(not WorldSave.summary().get("finished", {}).is_empty(), "...and the slot's facts say so, for the title screen")
+	main.queue_free()
+	await process_frame
 
-	print("test_world_defeat: %d passed, %d failed" % [_pass, _fail])
-	quit(1 if _fail > 0 else 0)
+# The roads' meeting: a hostile band pinned on the road to the farthest friendly
+# town, 60 units ahead, and the march into it. Any other band the road sends
+# on the way is waved off. Returns the pinned band, with its card up.
+func _meet_on_the_road(main):
+	var w = main.world
+	var p = w.player()
+	var dest = null
+	for s in w.settlements:
+		if WorldAI.is_monster(s.faction):
+			continue
+		if dest == null or s.position.distance_to(p.position) > dest.position.distance_to(p.position):
+			dest = s
+	var band = RoadScreen.band("hound", "goblinoid")
+	check(RoadScreen.pin_ahead(main, RoadScreen.node(dest), 60.0, band), "a band stands on the road ahead")
+	check(not w.parties.has(band), "...pinned there, off the map until it is met")
+	var got: String = await RoadScreen.go(self, main, dest.position, band, 600)
+	check(got == "card" and main._approach_foe == band, "the march walks up to it and its card opens (%s)" % got)
+	return band

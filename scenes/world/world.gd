@@ -2050,7 +2050,19 @@ func _launch_combat(foe, scouted_ahead := false, forced_ambush := false, jumped 
 	# both read the party that walked away. Still ahead of the autosave, so the
 	# save the fight makes carries the completion (tests/test_world_callings.gd).
 	if beat_band:
-		_calling_check("band_beaten", foe.id, _leader())   # shown after the spoils page
+		if RouteTravel.on(world) and not world.fallen.any(func(f): return String(f["id"]) == foe.id):
+			# #231: on the roads nothing comes back, so WorldAI.fell is not called
+			# above — but a calling's done line finds a beaten band's name in
+			# world.fallen (Callings.target_name), and without the record named
+			# a faction-less stranger (tests/test_world_callings_routes.gd). Kept
+			# for the check and dropped after it: nothing respawns off it here.
+			WorldAI.fell(world, foe)
+			_calling_check("band_beaten", foe.id, _leader())
+			for f in world.fallen.duplicate():
+				if String(f["id"]) == foe.id:
+					world.fallen.erase(f)
+		else:
+			_calling_check("band_beaten", foe.id, _leader())   # shown after the spoils page
 	world.clock.resume()
 	_autosave()   # O13 autosave: a fight is the biggest thing that
 	                               # happens to a run — never re-fight it after a crash
@@ -2596,17 +2608,20 @@ func _check_lairs() -> void:
 			_settle_target = l
 			break
 	_lair_settle_btn.visible = _settle_target != null
+	# Priced before the fork's search below returns: on the roads a cleared
+	# lair can be a fork a hidden way leaves (tests/test_world_raids_routes.gd
+	# found the button left greyed at the old purse there).
+	if _settle_target != null:
+		var cost := Raids.settle_cost(world, _settle_target)
+		_lair_settle_btn.text = "Settle it (%d ◉)" % cost
+		_lair_settle_btn.disabled = party.gold < cost
+		_lair_settle_btn.tooltip_text = "" if party.gold >= cost else "not enough gold"
 	if target == null and _route_search:
 		_lair_target = null
 		_lair_btn.visible = true
 		_lair_btn.text = "Search the ground (Survival)"
 		_lair_sneak_btn.visible = false
 		return
-	if _settle_target != null:
-		var cost := Raids.settle_cost(world, _settle_target)
-		_lair_settle_btn.text = "Settle it (%d ◉)" % cost
-		_lair_settle_btn.disabled = party.gold < cost
-		_lair_settle_btn.tooltip_text = "" if party.gold >= cost else "not enough gold"
 	if target == null:
 		_lair_btn.visible = false
 		_lair_sneak_btn.visible = false
