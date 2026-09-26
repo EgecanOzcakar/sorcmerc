@@ -694,8 +694,12 @@ func _the_city() -> void:
 	# the inn walks the world, and on a slow machine (the frames also run on
 	# real time) a hunter can reach the walls by morning. The walk that follows
 	# answers the card (_walk_into's _meet_them).
+	# Nor is the road asking the moment the company is out of the gate (#232:
+	# the inn's night has run the clock past the road's interval), nor a fight
+	# that answer turned into — each stops the clock on purpose.
 	if screen.world.clock.is_paused() and not screen._halted_on_arrival \
-			and not is_instance_valid(screen._approach_card):
+			and not is_instance_valid(screen._approach_card) and not is_instance_valid(screen._event_card) \
+			and screen._combat == null:
 		fail("town:leave — Leave did not give the world clock back")
 
 func _goto_page(page: String, label: String, deed: String) -> bool:
