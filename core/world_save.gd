@@ -27,6 +27,7 @@
 #   "grudges": {"gnoll": 20.0},       // Grudges.all() (#231): the monster peoples' side
 #   "routes": { <WorldRoutes.to_dict()> },   // #231: {} on a free-roaming world
 #   "route_walked": 1450.0,           // #231: the road's odometer
+#   "walk_home_from": 742.5,          // core/world_road_home.gd: out of a site at; -1 = not walking home
 #   "ladder": {"deeds": {"human": 13}, "audiences": ["human"]},   // Ladder.all()
 #   "origin": {"kind": "procedural", "seed": 42, "homes": true},   // which builder made this map;
 #                                     // "homes": its lair-for-every-people pass is done (core/world_homes.gd)
@@ -201,15 +202,7 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 			"pending_opinion_delta": s.pending_opinion_delta,
 			"raided_by": s.raided_by, "raided_at": s.raided_at,
 		})
-	var parties: Array = []
-	for p in world.parties:
-		parties.append({
-			"id": p.id, "position": _v(p.position), "faction": p.faction,
-			"is_player": p.is_player, "goal": _v(p.goal), "speed": p.speed,
-			"route": p.route.map(_v),   # #95: the legs still to walk
-			"ai": _enc(p.ai), "troops": p.troops,
-			"sname": p.sname,   # a pack's own name for it; "" is seeded (EnemyNames.band_name)
-		})
+	var parties: Array = world.parties.map(_band_dict)
 	# T91: lairs weren't a thing when this format was designed -- an old save
 	# without a "lairs" key just loads with none (from_dict below), not a
 	# missing-key crash.
@@ -251,10 +244,15 @@ static func to_dict(world, party = null, story = null) -> Dictionary:
 		"format": FORMAT, "version": VERSION,
 		"elapsed": world.clock.elapsed,
 		"bands_refilled_at": world.bands_refilled_at,   # #163
+		"walk_home_from": world.walk_home_from,   # core/world_road_home.gd's clock
 		"opinion": FactionOpinion.all(),
 		"grudges": Grudges.all(),
 		"routes": world.routes.to_dict() if world.routes != null else {},
 		"route_walked": world.route_walked,
+		# #231 phase 2: the bands standing on the roads (core/route_pins.gd), in
+		# the parties' own shape, and when each town next prices one.
+		"pinned": world.pinned.map(_band_dict),
+		"bounty_due": world.bounty_due.duplicate(),
 		"ladder": Ladder.all(),
 		"origin": {"kind": String(world.origin.get("kind", "small")),
 			"seed": int(world.origin.get("seed", 0)),
@@ -291,6 +289,8 @@ static func from_dict(d: Dictionary):
 	var world := World.new()
 	world.clock.elapsed = float(d.get("elapsed", 0.0))
 	world.bands_refilled_at = float(d.get("bands_refilled_at", 0.0))
+	# An old save has no walk home on it: the road it always was.
+	world.walk_home_from = float(d.get("walk_home_from", -1.0))
 	for sd in d.get("settlements", []):
 		var s := World.Settlement.new(String(sd["id"]), _vec(sd.get("position")),
 			String(sd.get("faction", "soldier")), String(sd.get("kind", "town")),
@@ -303,19 +303,11 @@ static func from_dict(d: Dictionary):
 		s.raided_at = float(sd.get("raided_at", -1.0))
 		world.add_settlement(s)
 	for pd in d.get("parties", []):
-		var p := World.RoamingParty.new(String(pd["id"]), _vec(pd.get("position")),
-			String(pd.get("faction", "soldier")), bool(pd.get("is_player", false)))
-		p.goal = _vec(pd.get("goal", pd.get("position")))
-		for wp in pd.get("route", []):
-			p.route.append(_vec(wp))
-		p.speed = float(pd.get("speed", World.SPEED))
-		p.ai = _dec(pd.get("ai", {}))
-		p.sname = String(pd.get("sname", ""))   # an old save has none: every band is seeded
-		var troops: Array[Dictionary] = []
-		for t in pd.get("troops", []):
-			troops.append(t)
-		p.troops = troops
-		world.add_party(p)
+		world.add_party(_band_from(pd))
+	for pd in d.get("pinned", []):   # #231 phase 2; an old save has none
+		world.pinned.append(_band_from(pd))
+	for sid in d.get("bounty_due", {}):
+		world.bounty_due[String(sid)] = float(d["bounty_due"][sid])
 	for fd in d.get("fallen", []):   # #142; an old save has none
 		world.fallen.append({"id": String(fd["id"]), "faction": String(fd["faction"]),
 			"sname": String(fd.get("sname", "")),
@@ -496,6 +488,30 @@ static func _ints(quests: Array) -> Array:
 # its own RNG, nothing at all for hunt), so it is walked generically rather than
 # branched on `behavior`: a new behavior serializes without touching this file.
 # JSON has no Vector2 and no objects, hence the two tagged forms.
+
+static func _band_dict(p) -> Dictionary:
+	return {
+		"id": p.id, "position": _v(p.position), "faction": p.faction,
+		"is_player": p.is_player, "goal": _v(p.goal), "speed": p.speed,
+		"route": p.route.map(_v),   # #95: the legs still to walk
+		"ai": _enc(p.ai), "troops": p.troops,
+		"sname": p.sname,   # a pack's own name for it; "" is seeded (EnemyNames.band_name)
+	}
+
+static func _band_from(pd: Dictionary) -> World.RoamingParty:
+	var p := World.RoamingParty.new(String(pd["id"]), _vec(pd.get("position")),
+		String(pd.get("faction", "soldier")), bool(pd.get("is_player", false)))
+	p.goal = _vec(pd.get("goal", pd.get("position")))
+	for wp in pd.get("route", []):
+		p.route.append(_vec(wp))
+	p.speed = float(pd.get("speed", World.SPEED))
+	p.ai = _dec(pd.get("ai", {}))
+	p.sname = String(pd.get("sname", ""))   # an old save has none: every band is seeded
+	var troops: Array[Dictionary] = []
+	for t in pd.get("troops", []):
+		troops.append(t)
+	p.troops = troops
+	return p
 
 static func _v(v: Vector2) -> Array:
 	return [v.x, v.y]

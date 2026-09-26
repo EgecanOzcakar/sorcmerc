@@ -31,6 +31,7 @@ const FactionOpinion = preload("res://core/faction_opinion.gd")
 const World = preload("res://core/world.gd")
 const WorldAI = preload("res://core/world_ai.gd")
 const EnemyNames = preload("res://core/enemy_names.gd")
+const RoutePins = preload("res://core/route_pins.gd")   # #231 phase 2: a band on the roads
 
 const DAY := 1440.0          # world-minutes, same constant the rest of the game counts in
 const NEAR := 60.0           # default radius for {"near": "riverhold"} — a little wider
@@ -387,9 +388,8 @@ static func _spawn(spec, world) -> Array[String]:
 	var id := String(spec.get("id", ""))
 	if id.is_empty():
 		return lines
-	for p in world.parties:      # a story that fires twice must not double the band
-		if p.id == id:
-			return lines
+	if world.band(id) != null:   # a story that fires twice must not double the band
+		return lines
 	var at := Vector2(0, 0)
 	if spec.has("near"):
 		var s = _settlement(world, String(spec["near"]))
@@ -413,6 +413,10 @@ static func _spawn(spec, world) -> Array[String]:
 			band.troops.append({"role": String(t.get("role", "heavy")),
 				"level": int(t.get("level", 1))})
 	WorldAI.hunt(band)
+	# #231 phase 2: on a route world nothing walks the map — the band stands on
+	# the nearest road to where the story put it, and the road meets it there.
+	if world.routes != null:
+		RoutePins.pin(world, band, "story")
 	lines.append(("%s takes the field." % band.sname) if band.sname != ""
 		else "%s take the field." % EnemyNames.upper_first(EnemyNames.band_name(band, world)))
 	return lines

@@ -487,6 +487,7 @@ func _init() -> void:
 	check(not lair9.looted, "a wipe leaves the lair standing to try again")
 
 	test_objective_rooms()
+	test_band_support()
 
 	print("test_site: %d passed, %d failed" % [_pass, _fail])
 	quit(1 if _fail > 0 else 0)
@@ -497,19 +498,20 @@ func test_objective_rooms() -> void:
 	var Objectives = load("res://core/objectives.gd")
 	var ids: Array = Site.COMBAT_ROOMS.map(func(r): return String(r["id"]))
 	check(ids.has("gate") and ids.has("pens"), "the gate and the pens are combat rooms")
-	# find a lair id whose interior has a pens room, and one whose has not
+	# find a lair id whose interior has a pens room, and one whose has not —
+	# asked of the world it will be entered in, which lays its floors out
+	var w := _world()
 	var with_pens = null
 	var without = null
 	for i in 400:
 		var l = World.Lair.new("warren-%d" % i, Vector2(100, 100), "goblinoid")
-		if Site.pens_ahead(l):
+		if Site.pens_ahead(l, w):
 			if with_pens == null: with_pens = l
 		elif without == null:
 			without = l
 		if with_pens != null and without != null:
 			break
 	check(with_pens != null and without != null, "some lairs hold captives and some do not")
-	var w := _world()
 	var p := _party()
 	var s = Site.for_lair(with_pens, p, w)
 	var pens := {}
@@ -561,5 +563,58 @@ func test_objective_rooms() -> void:
 		if s.rooms[d].has(pens):
 			deep = d
 	with_pens.depth_cleared = deep + 1
-	check(not Site.pens_ahead(with_pens), "pens the party has fought past do not count")
+	check(not Site.pens_ahead(with_pens, w), "pens the party has fought past do not count")
 	with_pens.depth_cleared = 0
+
+# The Heartland's own support pair (Site.BAND_SUPPORT; the owner's call on the
+# measured pass, build log "The road home"): a lair in the Heartland offers
+# rest rooms more often, and every lair outside it is laid out exactly as the
+# global pair lays it out, draw for draw, so no other band's measured number
+# moved.
+func test_band_support() -> void:
+	var RNG = load("res://core/rng.gd")
+	var w := _world()
+	var home: Array = Site.support_for("heartland")
+	check(home[0] > Site.SUPPORT_CHANCE and home[1] > Site.REST_SHARE,
+		"the Heartland offers support rooms, and rests among them, more often (%.2f / %.2f)" % [home[0], home[1]])
+	check(Site.support_for("marches") == [Site.SUPPORT_CHANCE, Site.REST_SHARE], "the Marches keep the global pair")
+	check(Site.support_for("") == [Site.SUPPORT_CHANCE, Site.REST_SHARE], "and so does a lair with no band to read")
+	check(Site.band_for(_lair(), null) == "", "no world, no band")
+	check(Site.band_for(_lair(), w) == "heartland", "a lair beside the start town is a Heartland lair")
+	var far = World.Lair.new("far-hold", Vector2(640, 0), "giant")
+	check(Site.band_for(far, w) != "heartland", "one past the seam is not (%s)" % Site.band_for(far, w))
+	# Outside the Heartland: the interior is the global pair's, room for room.
+	var same := true
+	for i in 30:
+		var l = World.Lair.new("hold-%d" % i, Vector2(640, 0), "giant")
+		var built = Site.for_lair(l, _party(), w)
+		var plain: Array = Site._build(l, RNG.new(maxi(1, absi(hash("site|%s" % l.id)))))
+		if str(built.rooms) != str(plain):
+			same = false
+	check(same, "a lair outside the Heartland is laid out exactly as before, draw for draw")
+	# Inside it: more rest rooms on offer, over the same lair ids.
+	var rests_home := 0
+	var rests_plain := 0
+	for i in 200:
+		var l = World.Lair.new("warren-%d" % i, Vector2(100, 100), "goblinoid")
+		for floor_picks in Site._build(l, RNG.new(maxi(1, absi(hash("site|%s" % l.id)))), "heartland"):
+			for r in floor_picks:
+				rests_home += 1 if String(r.get("kind", "")) == "rest" else 0
+		for floor_picks in Site._build(l, RNG.new(maxi(1, absi(hash("site|%s" % l.id))))):
+			for r in floor_picks:
+				rests_plain += 1 if String(r.get("kind", "")) == "rest" else 0
+	check(rests_home > rests_plain * 2,
+		"over 200 warrens the Heartland offers well over twice the rest rooms (%d against %d)" % [rests_home, rests_plain])
+	# for_lair and pens_ahead agree about a Heartland lair when both are asked
+	# of the same world (quest_posting.gd passes it).
+	var agree := true
+	for i in 60:
+		var l = World.Lair.new("pens-%d" % i, Vector2(100, 100), "goblinoid")
+		var s = Site.for_lair(l, _party(), w)
+		var has := false
+		for floor_picks in s.rooms:
+			for r in floor_picks:
+				has = has or String(r.get("objective", "")) == "rescue"
+		if has != Site.pens_ahead(l, w):
+			agree = false
+	check(agree, "pens_ahead reads the same interior for_lair builds")

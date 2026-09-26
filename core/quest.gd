@@ -181,7 +181,7 @@ static func offer_for(party, node_id: String, opinion := 0.0, rung := 0) -> Dict
 # target, not two.
 static func _world_quest_pool(world, giver_settlement) -> Array:
 	var pool: Array = []
-	for p in world.parties:
+	for p in world.bands():   # #231 phase 2: a band pinned on a road is a target like any
 		if not p.is_player and WorldAI.is_monster(p.faction):
 			pool.append({"kind": "hunt_party", "id": p.id, "name": EnemyNames.band_name(p, world), "faction": p.faction})
 	for s in world.settlements:
@@ -457,9 +457,12 @@ static func map_marks(world, party) -> Array:
 		else:
 			match String(q.get("kind", "")):
 				"hunt_party":
-					for p in world.parties:
-						if p.id == String(q.get("target_party_id", "")) and world.band_seen(p.position):
-							pos = p.position
+					# A band pinned on a road (#231 phase 2) is marked where it
+					# stands: the bounty names the road, which is the whole
+					# point of a job on a map where nothing is drawn.
+					var p = world.band(String(q.get("target_party_id", "")))
+					if p != null and (p.ai.has("pin") or world.band_seen(p.position)):
+						pos = p.position
 				"raid_settlement", "deliver_goods":
 					pos = _position_of(world.settlements, String(q.get("target_settlement_id", "")))
 				"clear_lair", "rescue":
